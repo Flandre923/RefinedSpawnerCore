@@ -2,6 +2,9 @@
   "itemGroup.examplemod": "Example Mod Tab",
   "block.examplemod.example_block": "Example Block",
   "item.examplemod.example_item": "Example Item",
+  "block.examplemod.magic_water": "Magic Water",
+  "item.examplemod.magic_water_bucket": "Magic Water Bucket",
+  "fluid.examplemod.magic_water": "Magic Water",
 
   "examplemod.configuration.title": "Example Mod Configs",
   "examplemod.configuration.section.examplemod.common.toml": "Example Mod Configs",
