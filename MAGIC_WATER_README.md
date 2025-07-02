@@ -14,10 +14,11 @@
 
 ### 🎨 流体属性
 - **发光等级**: 2 (微弱发光)
-- **密度**: 1000 (与水相同)
-- **粘度**: 1000 (与水相同)
+- **密度**: -1000 (负密度，使流体向上流动)
+- **粘度**: 500 (降低粘度，流动更快)
 - **颜色**: 紫色调 (0xFF6A5ACD)
 - **特殊属性**:
+  - **向上流动**: 魔法水会向天空流动而不是向地面流动！
   - 不能形成无限水源
   - 可以溺水
   - 可以灭火
@@ -61,7 +62,8 @@ src/main/resources/assets/examplemod/
 ### 放置流体
 1. 手持魔法水桶
 2. 右键点击地面放置魔法水
-3. 魔法水会像普通水一样流动，但具有紫色外观和微弱发光
+3. **神奇效果**: 魔法水会向上流动到天空中，而不是向下流动！
+4. 具有紫色外观和微弱发光效果
 
 ## 开发说明
 
@@ -76,6 +78,10 @@ src/main/resources/assets/examplemod/
 - **添加了必需的ID设置** (NeoForge 1.21.6要求方块和物品Properties必须设置ID)
   - 方块: `.setId(ResourceKey.create(Registries.BLOCK, ResourceLocation.fromNamespaceAndPath(MODID, "magic_water")))`
   - 物品: `.setId(ResourceKey.create(Registries.ITEM, ResourceLocation.fromNamespaceAndPath(MODID, "magic_water_bucket")))`
+- **修复了方法访问权限问题** (替换不可访问的`isWaterHole`方法为自定义的`isFluidHole`方法)
+- **解决了向上向下流动冲突** (重写核心方法防止流体抖动，确保稳定向上流动)
+- **实现严格向上流动逻辑** (只有在真正被阻挡时才向侧面扩散，确保纯粹的向上流动)
+- **修复流动距离和消散问题** (优化强度计算让流体流动更远，修复消散机制确保源头移除后流体正确消失)
 
 ### 扩展建议
 你可以进一步扩展这个流体：

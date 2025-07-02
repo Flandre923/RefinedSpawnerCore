@@ -9,8 +9,8 @@ public class MagicWaterFluidType extends FluidType {
     public MagicWaterFluidType() {
         super(FluidType.Properties.create()
                 .lightLevel(2) // 发光等级
-                .density(1000) // 密度
-                .viscosity(1000) // 粘度
+                .density(-1000) // 负密度，使流体向上流动
+                .viscosity(500) // 降低粘度，使流动更快
                 .sound(SoundActions.BUCKET_FILL, SoundEvents.BUCKET_FILL)
                 .sound(SoundActions.BUCKET_EMPTY, SoundEvents.BUCKET_EMPTY)
                 .canConvertToSource(false) // 不能形成无限水源
