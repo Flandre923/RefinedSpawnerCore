@@ -65,38 +65,33 @@ public abstract class MagicWaterFluid extends FlowingFluid {
         }
     }
 
-    // 主动触发邻居流体的更新检查
-    private void triggerNeighborUpdate(ServerLevel level, BlockPos pos) {
-        for (Direction direction : Direction.values()) {
-            BlockPos neighborPos = pos.relative(direction);
-            FluidState neighborFluidState = level.getFluidState(neighborPos);
 
-            if (neighborFluidState.getType().isSame(this)) {
-                // 强制邻居流体立即重新检查状态
-                level.scheduleTick(neighborPos, neighborFluidState.getType(), 1);
-
-                // 递归触发更远的邻居（但限制深度）
-                this.triggerNeighborUpdateRecursive(level, neighborPos, 1, 8);
+    @Override
+    protected void spreadTo(LevelAccessor level, BlockPos pos, BlockState blockState, Direction direction, FluidState fluidState) {
+        // 如果是移除源方块（变成空气），触发邻居更新
+        if (blockState.getFluidState().isSource() && fluidState.isEmpty()) {
+            if (level instanceof ServerLevel serverLevel) {
+                this.triggerNeighborUpdate(serverLevel, pos);
             }
         }
+        super.spreadTo(level, pos, blockState, direction, fluidState);
     }
 
-    // 递归触发邻居更新，但限制深度
-    private void triggerNeighborUpdateRecursive(ServerLevel level, BlockPos pos, int depth, int maxDepth) {
-        if (depth >= maxDepth) {
-            return;
-        }
+    // 主动触发邻居流体的更新检查
+    private void triggerNeighborUpdate(ServerLevel level, BlockPos pos) {
 
-        for (Direction direction : Direction.values()) {
-            BlockPos neighborPos = pos.relative(direction);
-            FluidState neighborFluidState = level.getFluidState(neighborPos);
+        // 更激进的方法：在更大范围内强制所有流体重新检查
+        for (int x = -10; x <= 10; x++) {
+            for (int y = -10; y <= 10; y++) {
+                for (int z = -10; z <= 10; z++) {
+                    BlockPos checkPos = pos.offset(x, y, z);
+                    FluidState checkFluidState = level.getFluidState(checkPos);
 
-            if (neighborFluidState.getType().isSame(this) && !neighborFluidState.isSource()) {
-                // 调度tick检查
-                level.scheduleTick(neighborPos, neighborFluidState.getType(), depth);
-
-                // 继续递归，但增加深度
-                this.triggerNeighborUpdateRecursive(level, neighborPos, depth + 1, maxDepth);
+                    if (checkFluidState.getType().isSame(this) && !checkFluidState.isSource()) {
+                        // 强制所有非源流体立即重新检查
+                        level.scheduleTick(checkPos, checkFluidState.getType(), 1);
+                    }
+                }
             }
         }
     }
@@ -108,7 +103,7 @@ public abstract class MagicWaterFluid extends FlowingFluid {
 
     @Override
     protected int getDropOff(LevelReader levelReader) {
-        return 1; // 保持标准的递减量，但在向上流动时会特殊处理
+        return 1; // 基础递减量，但向上流动时会被特殊处理以保持更高强度
     }
 
     @Override
@@ -128,7 +123,6 @@ public abstract class MagicWaterFluid extends FlowingFluid {
 
     protected void randomTick(ServerLevel level, BlockPos blockPos, FluidState fluidState, RandomSource randomSource) {
         // 在随机tick中强制检查消散
-        System.out.println("DEBUG: Random tick at " + blockPos + " - forcing dissipation check");
         if (!fluidState.isSource()) {
             // 强制重新调度正常tick
             level.scheduleTick(blockPos, fluidState.getType(), 1);
@@ -136,7 +130,17 @@ public abstract class MagicWaterFluid extends FlowingFluid {
     }
 
     public int getTickDelay(LevelReader levelReader) {
-        return 5; // tick延迟
+        return 5; // 基础tick延迟
+    }
+
+    // 重写getSpreadDelay来控制消散速度
+    @Override
+    protected int getSpreadDelay(Level level, BlockPos pos, FluidState currentState, FluidState newState) {
+        // 如果是消散过程（新状态强度更低），使用更长的延迟
+        if (!newState.isEmpty() && newState.getAmount() < currentState.getAmount()) {
+            return this.getTickDelay(level) * 3; // 消散时延迟更长，更自然
+        }
+        return this.getTickDelay(level);
     }
 
     // 重写这个方法确保流体总是被调度
@@ -145,204 +149,43 @@ public abstract class MagicWaterFluid extends FlowingFluid {
         return true; // 强制流体进行随机tick
     }
 
-    // 重写getNewLiquid方法，实现智能消散机制
     @Override
     protected FluidState getNewLiquid(ServerLevel level, BlockPos pos, BlockState state) {
         int maxStrength = 0;
-        int sourceCount = 0;
-        boolean hasFluidNeighbor = false;
-        boolean hasValidSource = false;
-
         // 检查所有邻居（包括下方）来确定流体状态
         for (Direction direction : Direction.values()) {
-            BlockPos neighborPos = pos.relative(direction);
-            BlockState neighborState = level.getBlockState(neighborPos);
-            FluidState neighborFluidState = neighborState.getFluidState();
+            if (direction == Direction.DOWN) {
+                BlockPos neighborPos = pos.relative(direction);
+                BlockState neighborState = level.getBlockState(neighborPos);
+                FluidState neighborFluidState = neighborState.getFluidState();
 
-            if (neighborFluidState.getType().isSame(this) && this.canPassThroughWall(direction, level, pos, state, neighborPos, neighborState)) {
-                hasFluidNeighbor = true;
-
-                if (neighborFluidState.isSource()) {
-                    sourceCount++;
-                    hasValidSource = true;
+                // 检查下方是否有同类型流体并且可以穿透
+                if (neighborFluidState.getType().isSame(this) && this.canPassThroughWall(direction, level, pos, state, neighborPos, neighborState)) {
+                    // 从下方获得的强度（向上流动的推力），增强 1，上限 7
+                    // 这是确保它能向上流动并维持柱子的关键
+                    int strengthFromNeighbor = Math.min(7, neighborFluidState.getAmount() + 1);
+                    maxStrength = Math.max(maxStrength, strengthFromNeighbor);
                 }
+            } else if (direction.getAxis().isHorizontal()) {
+                BlockPos neighborPos = pos.relative(direction);
+                BlockState neighborState = level.getBlockState(neighborPos);
+                FluidState neighborFluidState = neighborState.getFluidState();
 
-                // 计算从这个方向获得的强度
-                int strengthFromNeighbor;
-                if (direction == Direction.DOWN) {
-                    // 从下方获得的强度（向上流动的推力）
-                    strengthFromNeighbor = Math.max(1, neighborFluidState.getAmount() - 1);
-                } else if (direction == Direction.UP) {
-                    // 从上方获得的强度（向上流动的延续）
-                    strengthFromNeighbor = Math.min(8, neighborFluidState.getAmount() + 1);
-                } else {
-                    // 从水平方向获得的强度
-                    strengthFromNeighbor = Math.max(1, neighborFluidState.getAmount() - this.getDropOff(level));
+                if (neighborFluidState.getType().isSame(this) && this.canPassThroughWall(direction, level, pos, state, neighborPos, neighborState)) {
+                    maxStrength = Math.max(maxStrength, neighborFluidState.getAmount());
                 }
-
-                maxStrength = Math.max(maxStrength, strengthFromNeighbor);
             }
         }
 
-        // 如果没有任何流体邻居，这个位置应该是空的
-        if (!hasFluidNeighbor) {
+        int finalStrength = maxStrength - this.getDropOff(level);
+
+        if (finalStrength <= 0) {
             return Fluids.EMPTY.defaultFluidState();
-        }
-
-        // 简化的消散检查：使用距离而不是复杂的递归搜索
-        if (!hasValidSource) {
-            // 检查是否在合理的源头距离内
-            boolean withinSourceRange = this.isWithinSourceRange(level, pos, 16); // 最大搜索16格
-            System.out.println("DEBUG: Fluid at " + pos + " - hasValidSource: " + hasValidSource +
-                             ", withinSourceRange: " + withinSourceRange + ", maxStrength: " + maxStrength);
-            if (!withinSourceRange) {
-                System.out.println("DEBUG: Dissipating fluid at " + pos + " - no source within range");
-                return Fluids.EMPTY.defaultFluidState();
-            }
-        }
-
-        // 魔法水不应该自动生成源方块！
-        // 注释掉源方块生成逻辑，防止意外创建源方块
-        /*
-        if (sourceCount >= 2) {
-            BlockPos belowPos = pos.below();
-            BlockState belowState = level.getBlockState(belowPos);
-            FluidState belowFluidState = belowState.getFluidState();
-            if (belowState.isSolid() || this.isSourceBlockOfThisType(belowFluidState)) {
-                return this.getSource(false);
-            }
-        }
-        */
-
-        // 创建流动流体，如果强度太低则返回空
-        // 关键修复：确保永远不创建源方块，即使强度为8
-        FluidState result;
-        if (maxStrength <= 0) {
-            result = Fluids.EMPTY.defaultFluidState();
         } else {
             // 强制限制最大强度为7，防止创建源方块
-            int safeStrength = Math.min(maxStrength, 7);
-            result = this.getFlowing(safeStrength, false);
+            int safeFinalStrength = Math.min(finalStrength, 7);
+            return this.getFlowing(safeFinalStrength, false); // 确保不是falling状态
         }
-        System.out.println("DEBUG: getNewLiquid result at " + pos + " - " +
-                         (result.isEmpty() ? "EMPTY" : "FLOWING amount=" + result.getAmount() + ", isSource=" + result.isSource()));
-        return result;
-    }
-
-    // 检查是否有到源头的有效连接（递归搜索，但有深度限制）
-    private boolean hasSourceConnection(ServerLevel level, BlockPos pos, Set<BlockPos> visited) {
-        // 防止无限递归和重复检查
-        if (visited.contains(pos) || visited.size() > 32) {
-            System.out.println("DEBUG: Search terminated at " + pos + " - " +
-                             (visited.contains(pos) ? "already visited" : "depth limit reached"));
-            return false;
-        }
-        visited.add(pos);
-
-        System.out.println("DEBUG: Searching for source from " + pos + ", visited count: " + visited.size());
-
-        // 检查所有邻居
-        for (Direction direction : Direction.values()) {
-            BlockPos neighborPos = pos.relative(direction);
-            FluidState neighborFluidState = level.getFluidState(neighborPos);
-
-            if (neighborFluidState.getType().isSame(this)) {
-                // 更严格的源方块检查
-                if (neighborFluidState.isSource()) {
-                    // 额外验证：检查方块状态确认这真的是源方块
-                    BlockState neighborBlockState = level.getBlockState(neighborPos);
-                    boolean isRealSource = this.isRealSourceBlock(level, neighborPos, neighborBlockState, neighborFluidState);
-                    System.out.println("DEBUG: Found potential source at " + neighborPos + " from " + pos +
-                                     ", isRealSource: " + isRealSource + ", amount: " + neighborFluidState.getAmount());
-                    if (isRealSource) {
-                        return true;
-                    }
-                }
-
-                // 如果是流动流体，递归检查它是否连接到源头
-                if (!neighborFluidState.isEmpty() && !visited.contains(neighborPos)) {
-                    if (this.hasSourceConnection(level, neighborPos, visited)) {
-                        return true;
-                    }
-                }
-            }
-        }
-
-        System.out.println("DEBUG: No source connection found from " + pos);
-        return false;
-    }
-
-    // 验证是否是真正的源方块
-    private boolean isRealSourceBlock(ServerLevel level, BlockPos pos, BlockState blockState, FluidState fluidState) {
-        // 简化检查：只验证流体状态
-        boolean isSource = fluidState.isSource() && fluidState.getAmount() == 8;
-        System.out.println("DEBUG: Verifying source at " + pos + " - isSource: " + fluidState.isSource() +
-                         ", amount: " + fluidState.getAmount() + ", result: " + isSource);
-        return isSource;
-    }
-
-    // 检查是否在源头范围内（使用简单的距离检查）
-    private boolean isWithinSourceRange(ServerLevel level, BlockPos pos, int maxRange) {
-        // 在指定范围内搜索真正的源方块
-        for (int x = -maxRange; x <= maxRange; x++) {
-            for (int y = -maxRange; y <= maxRange; y++) {
-                for (int z = -maxRange; z <= maxRange; z++) {
-                    BlockPos checkPos = pos.offset(x, y, z);
-                    FluidState checkFluidState = level.getFluidState(checkPos);
-
-                    if (checkFluidState.getType().isSame(this) &&
-                        checkFluidState.isSource() &&
-                        checkFluidState.getAmount() == 8) {
-
-                        // 找到真正的源方块，检查是否可达
-                        if (this.isReachableFrom(level, pos, checkPos, maxRange)) {
-                            System.out.println("DEBUG: Found reachable source at " + checkPos + " from " + pos);
-                            return true;
-                        }
-                    }
-                }
-            }
-        }
-        System.out.println("DEBUG: No reachable source found within range " + maxRange + " from " + pos);
-        return false;
-    }
-
-    // 检查从起点到源头是否可达（简化的路径检查）
-    private boolean isReachableFrom(ServerLevel level, BlockPos from, BlockPos to, int maxSteps) {
-        // 简单的曼哈顿距离检查
-        int distance = Math.abs(from.getX() - to.getX()) +
-                      Math.abs(from.getY() - to.getY()) +
-                      Math.abs(from.getZ() - to.getZ());
-
-        // 如果距离太远，认为不可达
-        if (distance > maxSteps) {
-            return false;
-        }
-
-        // 检查路径上是否有连续的流体
-        return this.hasFluidPath(level, from, to);
-    }
-
-    // 检查两点之间是否有流体路径
-    private boolean hasFluidPath(ServerLevel level, BlockPos from, BlockPos to) {
-        // 简化：只检查垂直路径（因为我们主要关心向上流动）
-        if (from.getX() == to.getX() && from.getZ() == to.getZ()) {
-            int minY = Math.min(from.getY(), to.getY());
-            int maxY = Math.max(from.getY(), to.getY());
-
-            for (int y = minY; y <= maxY; y++) {
-                BlockPos checkPos = new BlockPos(from.getX(), y, from.getZ());
-                FluidState checkFluidState = level.getFluidState(checkPos);
-
-                if (!checkFluidState.getType().isSame(this)) {
-                    return false; // 路径中断
-                }
-            }
-            return true;
-        }
-
-        // 对于非垂直路径，暂时返回true（可以后续优化）
-        return true;
     }
 
     @Override
@@ -358,33 +201,23 @@ public abstract class MagicWaterFluid extends FlowingFluid {
     // 重写tick方法，防止向下流动并确保持续更新
     @Override
     public void tick(ServerLevel level, BlockPos pos, BlockState blockState, FluidState fluidState) {
-        System.out.println("DEBUG: Tick at " + pos + " - isSource: " + fluidState.isSource() +
-                         ", amount: " + fluidState.getAmount());
 
         if (!fluidState.isSource()) {
             FluidState newFluidState = this.getNewLiquid(level, pos, level.getBlockState(pos));
             int spreadDelay = this.getSpreadDelay(level, pos, fluidState, newFluidState);
-
-            System.out.println("DEBUG: Old state: " + fluidState.getAmount() +
-                             ", New state: " + (newFluidState.isEmpty() ? "EMPTY" : String.valueOf(newFluidState.getAmount())));
-
             if (newFluidState.isEmpty()) {
                 // 流体消散时，通知邻居重新检查
-                System.out.println("DEBUG: Fluid dissipating at " + pos + ", notifying neighbors");
                 this.notifyNeighborsOfChange(level, pos);
                 fluidState = newFluidState;
                 blockState = Blocks.AIR.defaultBlockState();
                 level.setBlock(pos, blockState, 3);
             } else if (newFluidState != fluidState) {
-                System.out.println("DEBUG: Fluid state changed at " + pos);
                 fluidState = newFluidState;
                 blockState = newFluidState.createLegacyBlock();
                 level.setBlock(pos, blockState, 3);
                 level.scheduleTick(pos, newFluidState.getType(), spreadDelay);
             } else {
-                // 即使状态没有改变，也要定期重新调度tick以确保消散检查
-                System.out.println("DEBUG: Rescheduling tick at " + pos + " for continued checking");
-                level.scheduleTick(pos, fluidState.getType(), this.getTickDelay(level) * 2);
+                level.scheduleTick(pos, fluidState.getType(), this.getTickDelay(level)); // 更频繁的检查
             }
         }
 
@@ -405,26 +238,24 @@ public abstract class MagicWaterFluid extends FlowingFluid {
         }
     }
 
-    // 重写spread方法实现向上流动优先逻辑
+    // 重写spread方法实现正确的优先级逻辑
     @Override
     protected void spread(ServerLevel level, BlockPos pos, BlockState blockState, FluidState fluidState) {
         if (!fluidState.isEmpty()) {
-            // 检查是否可以向上流动
+            // 优先尝试向上流动
             if (this.canFlowUpward(level, pos, blockState, fluidState)) {
-                // 向上流动
                 this.flowUpward(level, pos, blockState, fluidState);
-                return; // 向上流动成功，不进行侧面扩散
+                return; // 向上流动成功，不需要侧面扩散
             }
 
-            // 只有在无法向上流动时才考虑侧面扩散
-            // 并且不受下方方块影响
-            this.spreadToSidesOnly(level, pos, fluidState, blockState);
+            // 只有当无法向上流动时（被阻挡），才进行侧面扩散
+            this.spreadToSidesWhenBlocked(level, pos, fluidState, blockState);
         }
     }
 
-    // 检查是否可以向上流动 - 调整条件让流体能流动更远
+    // 检查是否可以向上流动 - 非常宽松的条件让流体流动更远
     private boolean canFlowUpward(ServerLevel level, BlockPos pos, BlockState blockState, FluidState fluidState) {
-        // 降低强度阈值，让流体能流动更远
+        // 几乎所有强度的流体都能向上流动
         if (fluidState.getAmount() < 1) {
             return false;
         }
@@ -453,10 +284,10 @@ public abstract class MagicWaterFluid extends FlowingFluid {
         BlockState aboveState = level.getBlockState(abovePos);
         FluidState aboveFluidState = aboveState.getFluidState();
 
-        // 计算向上流动的强度，减少递减让流体流动更远
+        // 计算向上流动的强度，增强向上流动能力
         int currentStrength = fluidState.getAmount();
-        // 向上流动时强度递减更少，让流体能流动更远
-        int upwardStrength = Math.max(1, currentStrength - 1);
+        // 向上流动时强度增强，让流体能流动很远
+        int upwardStrength = Math.min(7, Math.max(2, currentStrength + 1)); // 增强强度
 
         // 如果强度太低，不进行向上流动
         if (upwardStrength <= 0) {
@@ -486,19 +317,16 @@ public abstract class MagicWaterFluid extends FlowingFluid {
         }
     }
 
-    // 只向侧面扩散，仅在确实无法向上流动时执行
-    private void spreadToSidesOnly(ServerLevel level, BlockPos pos, FluidState fluidState, BlockState blockState) {
-        // 再次确认真的无法向上流动
-        if (this.canFlowUpward(level, pos, blockState, fluidState)) {
-            return; // 如果还能向上流动，就不要向侧面扩散
-        }
-
-        // 检查上方是否真的被阻挡
+    // 只有在被阻挡时才向侧面扩散
+    private void spreadToSidesWhenBlocked(ServerLevel level, BlockPos pos, FluidState fluidState, BlockState blockState) {
+        // 确认上方确实被阻挡
         BlockPos abovePos = pos.above();
         BlockState aboveState = level.getBlockState(abovePos);
         if (aboveState.isAir() || aboveState.canBeReplaced()) {
-            return; // 上方还有空间，不应该向侧面扩散
+            // 上方有空间，不应该侧面扩散
+            return;
         }
+
 
         int flowStrength = fluidState.getAmount() - this.getDropOff(level);
 
@@ -515,15 +343,27 @@ public abstract class MagicWaterFluid extends FlowingFluid {
                 FluidState neighborFluidState = neighborState.getFluidState();
 
                 if (this.canMaybePassThrough(level, pos, blockState, direction, neighborPos, neighborState, neighborFluidState)) {
-                    // 向侧面流动时强度显著递减
-                    int newStrength = Math.max(1, flowStrength - 3);
+                    // 向侧面流动时保持较高强度，确保能继续向上流动
+                    int newStrength = Math.max(2, flowStrength - 1); // 保持至少强度2
                     // 确保不创建源方块
                     int safeNewStrength = Math.min(newStrength, 7);
                     FluidState newFluidState = this.getFlowing(safeNewStrength, false);
 
+
                     if (this.canHoldSpecificFluid(level, neighborPos, neighborState, newFluidState.getType())) {
                         if (neighborFluidState.canBeReplacedWith(level, neighborPos, newFluidState.getType(), direction)) {
                             this.spreadTo(level, neighborPos, neighborState, direction, newFluidState);
+
+                            // 检查侧面位置是否可以继续向上流动
+                            BlockPos sideAbovePos = neighborPos.above();
+                            BlockState sideAboveState = level.getBlockState(sideAbovePos);
+                            if ((sideAboveState.isAir() || sideAboveState.canBeReplaced()) && safeNewStrength >= 2) {
+                                // 如果侧面位置上方有空间且强度足够，调度向上流动（稍微延迟避免抖动）
+                                level.scheduleTick(neighborPos, newFluidState.getType(), this.getTickDelay(level) + 2);
+                            } else {
+                                // 如果不能向上流动，调度正常tick继续侧面扩散
+                                level.scheduleTick(neighborPos, newFluidState.getType(), this.getTickDelay(level) * 2);
+                            }
                         }
                     }
                 }
@@ -711,5 +551,60 @@ public abstract class MagicWaterFluid extends FlowingFluid {
     // 自定义的流体容纳检测方法
     private boolean canHoldFluid(BlockGetter level, BlockPos pos, BlockState state, Fluid fluid) {
         return this.canHoldAnyFluid(state) && this.canHoldSpecificFluid(level, pos, state, fluid);
+    }
+
+    // 检查范围内是否有任何源方块
+    private boolean hasAnySourceInRange(ServerLevel level, BlockPos pos, int range) {
+        for (int x = -range; x <= range; x++) {
+            for (int y = -range; y <= range; y++) {
+                for (int z = -range; z <= range; z++) {
+                    BlockPos checkPos = pos.offset(x, y, z);
+                    FluidState checkFluidState = level.getFluidState(checkPos);
+
+                    if (checkFluidState.getType().isSame(this) &&
+                        checkFluidState.isSource() &&
+                        checkFluidState.getAmount() == 8) {
+                        return true;
+                    }
+                }
+            }
+        }
+        return false;
+    }
+
+    // 检查流体是否正在活跃流动（更宽松的检测避免抖动）
+    private boolean isActivelyFlowing(ServerLevel level, BlockPos pos, int currentStrength) {
+        // 检查下方是否有流体支持向上流动（放宽条件）
+        BlockPos belowPos = pos.below();
+        FluidState belowFluidState = level.getFluidState(belowPos);
+
+        if (belowFluidState.getType().isSame(this) && !belowFluidState.isEmpty()) {
+            // 放宽条件：下方有同类型流体且强度相近就认为是活跃流动
+            if (belowFluidState.getAmount() >= currentStrength - 1) { // 允许稍弱的支持
+                return true;
+            }
+        }
+
+        // 检查是否有水平方向的流体支持（也放宽条件）
+        for (Direction direction : Direction.Plane.HORIZONTAL) {
+            BlockPos neighborPos = pos.relative(direction);
+            FluidState neighborFluidState = level.getFluidState(neighborPos);
+
+            if (neighborFluidState.getType().isSame(this) && !neighborFluidState.isEmpty()) {
+                // 放宽条件：邻居强度相近就认为是活跃流动
+                if (neighborFluidState.getAmount() >= currentStrength - 1) {
+                    return true;
+                }
+            }
+        }
+
+        // 特殊检查：如果上方有空间且当前强度足够，也认为是活跃流动
+        BlockPos abovePos = pos.above();
+        BlockState aboveState = level.getBlockState(abovePos);
+        if ((aboveState.isAir() || aboveState.canBeReplaced()) && currentStrength >= 2) {
+            return true;
+        }
+
+        return false;
     }
 }
