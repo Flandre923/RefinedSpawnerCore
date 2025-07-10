@@ -1,0 +1,12 @@
+This is a placeholder for the mob_spawner.png GUI texture file.
+
+You need to create a 176x166 pixel PNG image named "mob_spawner.png" in this directory.
+
+The texture should be a GUI background for the mob spawner configuration screen. You can:
+1. Create your own custom GUI texture
+2. Use a modified version of a vanilla GUI texture
+3. Use any GUI texture as a temporary placeholder
+
+The standard Minecraft GUI size is 176x166 pixels.
+
+Once you have the texture file, delete this placeholder file and place your mob_spawner.png here.

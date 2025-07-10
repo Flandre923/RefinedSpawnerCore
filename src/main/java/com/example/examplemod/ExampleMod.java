@@ -26,6 +26,9 @@ import net.minecraft.world.level.block.state.BlockBehaviour;
 import net.minecraft.world.level.material.FlowingFluid;
 import net.minecraft.world.level.material.Fluid;
 import net.minecraft.world.level.material.MapColor;
+import net.minecraft.world.level.block.entity.BlockEntityType;
+import net.minecraft.world.inventory.MenuType;
+import net.neoforged.neoforge.common.extensions.IMenuTypeExtension;
 import net.neoforged.api.distmarker.Dist;
 import net.neoforged.bus.api.IEventBus;
 import net.neoforged.bus.api.SubscribeEvent;
@@ -45,10 +48,17 @@ import net.neoforged.neoforge.registries.DeferredRegister;
 import net.neoforged.neoforge.registries.NeoForgeRegistries;
 import net.neoforged.neoforge.fluids.FluidType;
 import net.neoforged.neoforge.client.extensions.common.RegisterClientExtensionsEvent;
+import net.neoforged.neoforge.network.event.RegisterPayloadHandlersEvent;
+import net.neoforged.neoforge.network.registration.PayloadRegistrar;
 
 import com.example.examplemod.fluid.MagicWaterFluid;
 import com.example.examplemod.fluid.MagicWaterFluidType;
 import com.example.examplemod.fluid.MagicWaterClientExtensions;
+import com.example.examplemod.blockentity.MobSpawnerBlock;
+import com.example.examplemod.blockentity.MobSpawnerBlockEntity;
+import com.example.examplemod.blockentity.MobSpawnerMenu;
+import com.example.examplemod.blockentity.MobSpawnerScreen;
+import com.example.examplemod.network.MobSpawnerUpdatePacket;
 
 // The value here should match an entry in the META-INF/neoforge.mods.toml file
 @Mod(ExampleMod.MODID)
@@ -67,6 +77,10 @@ public class ExampleMod {
     public static final DeferredRegister<Fluid> FLUIDS = DeferredRegister.create(BuiltInRegistries.FLUID, MODID);
     // Create a Deferred Register to hold FluidTypes which will all be registered under the "examplemod" namespace
     public static final DeferredRegister<FluidType> FLUID_TYPES = DeferredRegister.create(NeoForgeRegistries.FLUID_TYPES, MODID);
+    // Create a Deferred Register to hold BlockEntityTypes which will all be registered under the "examplemod" namespace
+    public static final DeferredRegister<BlockEntityType<?>> BLOCK_ENTITY_TYPES = DeferredRegister.create(Registries.BLOCK_ENTITY_TYPE, MODID);
+    // Create a Deferred Register to hold MenuTypes which will all be registered under the "examplemod" namespace
+    public static final DeferredRegister<MenuType<?>> MENU_TYPES = DeferredRegister.create(Registries.MENU, MODID);
 
     // Creates a new Block with the id "examplemod:example_block", combining the namespace and path
     public static final DeferredBlock<Block> EXAMPLE_BLOCK = BLOCKS.registerSimpleBlock("example_block", BlockBehaviour.Properties.of().mapColor(MapColor.STONE));
@@ -96,6 +110,24 @@ public class ExampleMod {
             .setId(ResourceKey.create(Registries.ITEM, ResourceLocation.fromNamespaceAndPath(MODID, "magic_water_bucket")))
             .craftRemainder(Items.BUCKET).stacksTo(1)));
 
+    // Mob Spawner Block
+    public static final DeferredBlock<MobSpawnerBlock> MOB_SPAWNER_BLOCK = BLOCKS.register("mob_spawner",
+        () -> new MobSpawnerBlock(BlockBehaviour.Properties.of()
+            .setId(ResourceKey.create(Registries.BLOCK, ResourceLocation.fromNamespaceAndPath(MODID, "mob_spawner")))
+            .mapColor(MapColor.STONE).strength(5.0F).requiresCorrectToolForDrops()));
+
+    // Mob Spawner Block Item
+    public static final DeferredItem<BlockItem> MOB_SPAWNER_BLOCK_ITEM = ITEMS.registerSimpleBlockItem("mob_spawner", MOB_SPAWNER_BLOCK);
+
+    // Mob Spawner Block Entity Type
+    public static final DeferredHolder<BlockEntityType<?>, BlockEntityType<MobSpawnerBlockEntity>> MOB_SPAWNER_BLOCK_ENTITY =
+        BLOCK_ENTITY_TYPES.register("mob_spawner", () -> new BlockEntityType<>(
+            MobSpawnerBlockEntity::new, MOB_SPAWNER_BLOCK.get()));
+
+    // Mob Spawner Menu Type
+    public static final DeferredHolder<MenuType<?>, MenuType<MobSpawnerMenu>> MOB_SPAWNER_MENU =
+        MENU_TYPES.register("mob_spawner", () -> IMenuTypeExtension.create(MobSpawnerMenu::new));
+
     // Creates a creative tab with the id "examplemod:example_tab" for the example item, that is placed after the combat tab
     public static final DeferredHolder<CreativeModeTab, CreativeModeTab> EXAMPLE_TAB = CREATIVE_MODE_TABS.register("example_tab", () -> CreativeModeTab.builder()
             .title(Component.translatable("itemGroup.examplemod")) //The language key for the title of your CreativeModeTab
@@ -104,6 +136,7 @@ public class ExampleMod {
             .displayItems((parameters, output) -> {
                 output.accept(EXAMPLE_ITEM.get()); // Add the example item to the tab. For your own tabs, this method is preferred over the event
                 output.accept(MAGIC_WATER_BUCKET.get()); // Add the magic water bucket to the tab
+                output.accept(MOB_SPAWNER_BLOCK_ITEM.get()); // Add the mob spawner block to the tab
             }).build());
 
     // The constructor for the mod class is the first code that is run when your mod is loaded.
@@ -122,6 +155,10 @@ public class ExampleMod {
         FLUIDS.register(modEventBus);
         // Register the Deferred Register to the mod event bus so fluid types get registered
         FLUID_TYPES.register(modEventBus);
+        // Register the Deferred Register to the mod event bus so block entity types get registered
+        BLOCK_ENTITY_TYPES.register(modEventBus);
+        // Register the Deferred Register to the mod event bus so menu types get registered
+        MENU_TYPES.register(modEventBus);
 
         // Register ourselves for server and other game events we are interested in.
         // Note that this is necessary if and only if we want *this* class (ExampleMod) to respond directly to events.
@@ -130,6 +167,9 @@ public class ExampleMod {
 
         // Register the item to a creative tab
         modEventBus.addListener(this::addCreative);
+
+        // Register network packets
+        modEventBus.addListener(this::registerPayloads);
 
         // Register our mod's ModConfigSpec so that FML can create and load the config file for us
         modContainer.registerConfig(ModConfig.Type.COMMON, Config.SPEC);
@@ -148,6 +188,15 @@ public class ExampleMod {
         Config.ITEM_STRINGS.get().forEach((item) -> LOGGER.info("ITEM >> {}", item));
     }
 
+    private void registerPayloads(RegisterPayloadHandlersEvent event) {
+        PayloadRegistrar registrar = event.registrar(MODID);
+        registrar.playToServer(
+            MobSpawnerUpdatePacket.TYPE,
+            MobSpawnerUpdatePacket.STREAM_CODEC,
+            MobSpawnerUpdatePacket::handle
+        );
+    }
+
     // Add the example block item to the building blocks tab
     private void addCreative(BuildCreativeModeTabContentsEvent event) {
         if (event.getTabKey() == CreativeModeTabs.BUILDING_BLOCKS) {
@@ -155,6 +204,7 @@ public class ExampleMod {
         }
         if (event.getTabKey() == CreativeModeTabs.TOOLS_AND_UTILITIES) {
             event.accept(MAGIC_WATER_BUCKET);
+            event.accept(MOB_SPAWNER_BLOCK_ITEM);
         }
     }
 
@@ -177,6 +227,11 @@ public class ExampleMod {
         public static void registerClientExtensions(RegisterClientExtensionsEvent event) {
             // 注册流体客户端扩展
             event.registerFluidType(new MagicWaterClientExtensions(), MAGIC_WATER_TYPE.get());
+        }
+
+        @SubscribeEvent
+        public static void registerScreens(net.neoforged.neoforge.client.event.RegisterMenuScreensEvent event) {
+            event.register(MOB_SPAWNER_MENU.get(), MobSpawnerScreen::new);
         }
     }
 }

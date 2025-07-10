@@ -5,6 +5,8 @@
   "block.examplemod.magic_water": "Magic Water",
   "item.examplemod.magic_water_bucket": "Magic Water Bucket",
   "fluid.examplemod.magic_water": "Magic Water",
+  "block.examplemod.mob_spawner": "Mob Spawner",
+  "container.examplemod.mob_spawner": "Mob Spawner Configuration",
 
   "examplemod.configuration.title": "Example Mod Configs",
   "examplemod.configuration.section.examplemod.common.toml": "Example Mod Configs",
