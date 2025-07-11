@@ -27,8 +27,15 @@ import net.minecraft.world.entity.player.Inventory;
 
 import java.util.List;
 import java.util.Optional;
+import net.minecraft.world.Container;
+import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.item.SpawnEggItem;
+import net.minecraft.core.NonNullList;
+import net.minecraft.world.inventory.SimpleContainerData;
+import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.world.ContainerHelper;
 
-public class MobSpawnerBlockEntity extends BlockEntity implements MenuProvider {
+public class MobSpawnerBlockEntity extends BlockEntity implements MenuProvider, Container {
     private static final int SPAWN_RANGE = 4; // 9x9区域的半径
     private static final int SPAWN_DELAY = 100; // 5秒 (20 ticks/秒 * 5)
     private static final int MAX_NEARBY_ENTITIES = 6; // 附近最大实体数量
@@ -41,6 +48,9 @@ public class MobSpawnerBlockEntity extends BlockEntity implements MenuProvider {
     private int maxNearbyEntities = MAX_NEARBY_ENTITIES;
     private int requiredPlayerRange = 16;
     private int spawnRange = SPAWN_RANGE;
+
+    // 物品槽位 - 用于存储刷怪蛋
+    private NonNullList<ItemStack> items = NonNullList.withSize(1, ItemStack.EMPTY);
 
     // ContainerData for GUI synchronization
     private final ContainerData dataAccess = new ContainerData() {
@@ -122,27 +132,35 @@ public class MobSpawnerBlockEntity extends BlockEntity implements MenuProvider {
     }
 
     private boolean spawnMob(ServerLevel level, BlockPos spawnerPos) {
-        // 使用与NaturalSpawner相同的逻辑来获取可生成的生物
-        // 这会自动处理生物群系和结构的生物生成规则
-        WeightedList<MobSpawnSettings.SpawnerData> possibleSpawns = getMobsAtPosition(
-            level,
-            spawnerPos,
-            MobCategory.MONSTER
-        );
-
-        if (possibleSpawns.isEmpty()) {
-            return false;
-        }
-
-        // 随机选择一个敌对生物类型
+        EntityType<?> entityType = null;
         RandomSource random = level.random;
-        Optional<MobSpawnSettings.SpawnerData> optionalSpawnerData = possibleSpawns.getRandom(random);
-        if (optionalSpawnerData.isEmpty()) {
-            return false;
-        }
 
-        MobSpawnSettings.SpawnerData spawnerData = optionalSpawnerData.get();
-        EntityType<?> entityType = spawnerData.type();
+        // 检查是否有刷怪蛋
+        ItemStack spawnEggStack = this.items.get(0);
+        if (!spawnEggStack.isEmpty() && spawnEggStack.getItem() instanceof SpawnEggItem spawnEggItem) {
+            // 使用刷怪蛋指定的生物类型
+            entityType = spawnEggItem.getType(level.registryAccess(), spawnEggStack);
+        } else {
+            // 使用原来的逻辑 - 根据生物群系生成
+            WeightedList<MobSpawnSettings.SpawnerData> possibleSpawns = getMobsAtPosition(
+                level,
+                spawnerPos,
+                MobCategory.MONSTER
+            );
+
+            if (possibleSpawns.isEmpty()) {
+                return false;
+            }
+
+            // 随机选择一个敌对生物类型
+            Optional<MobSpawnSettings.SpawnerData> optionalSpawnerData = possibleSpawns.getRandom(random);
+            if (optionalSpawnerData.isEmpty()) {
+                return false;
+            }
+
+            MobSpawnSettings.SpawnerData spawnerData = optionalSpawnerData.get();
+            entityType = spawnerData.type();
+        }
 
         // 在9x9x9区域内随机选择生成位置
         for (int attempts = 0; attempts < 50; attempts++) {
@@ -196,20 +214,27 @@ public class MobSpawnerBlockEntity extends BlockEntity implements MenuProvider {
         output.putInt("MaxNearbyEntities", this.maxNearbyEntities);
         output.putInt("RequiredPlayerRange", this.requiredPlayerRange);
         output.putInt("SpawnRange", this.spawnRange);
+
+        // 保存物品数据
+        ContainerHelper.saveAllItems(output, this.items);
     }
 
     @Override
     protected void loadAdditional(ValueInput input) {
         super.loadAdditional(input);
 
-        // 使用read方法加载数据，如果不存在则使用默认值
+        // 加载数据，如果不存在则使用默认值
         this.spawnDelay = input.getInt("SpawnDelay").orElse(this.spawnDelay);
-        this.minSpawnDelay = input.getInt("MinSpawnDelay").orElse(this.minSpawnDelay);
-        this.maxSpawnDelay = input.getInt("MaxSpawnDelay").orElse(this.maxSpawnDelay);
+        this.minSpawnDelay = input.getInt("MinSpawnDelay") .orElse(this.minSpawnDelay);
+        this.maxSpawnDelay = input.getInt("MaxSpawnDelay") .orElse(this.maxSpawnDelay);
         this.spawnCount = input.getInt("SpawnCount").orElse(this.spawnCount);
         this.maxNearbyEntities = input.getInt("MaxNearbyEntities").orElse(this.maxNearbyEntities);
         this.requiredPlayerRange = input.getInt("RequiredPlayerRange").orElse(this.requiredPlayerRange);
-        this.spawnRange = input.getInt("SpawnRange").orElse(this.spawnRange);
+        this.spawnRange = input.getInt("SpawnRange").orElse(this.spawnRange) ;
+
+        // 加载物品数据
+        this.items = NonNullList.withSize(this.getContainerSize(), ItemStack.EMPTY);
+        ContainerHelper.loadAllItems(input, this.items);
     }
 
     // MenuProvider implementation
@@ -280,10 +305,6 @@ public class MobSpawnerBlockEntity extends BlockEntity implements MenuProvider {
     public int getRequiredPlayerRange() { return this.requiredPlayerRange; }
     public int getSpawnRange() { return this.spawnRange; }
 
-    public boolean stillValid(Player player) {
-        return this.level != null && this.level.getBlockEntity(this.worldPosition) == this &&
-               player.distanceToSqr(this.worldPosition.getX() + 0.5, this.worldPosition.getY() + 0.5, this.worldPosition.getZ() + 0.5) <= 64.0;
-    }
 
     /**
      * 使用与NaturalSpawner相同的逻辑获取指定位置的可生成生物
@@ -332,5 +353,103 @@ public class MobSpawnerBlockEntity extends BlockEntity implements MenuProvider {
             return structure != null && structureManager.getStructureAt(pos, structure).isValid();
         }
         return false;
+    }
+
+    // Container接口实现
+    @Override
+    public int getContainerSize() {
+        return this.items.size();
+    }
+
+    @Override
+    public boolean isEmpty() {
+        for (ItemStack itemstack : this.items) {
+            if (!itemstack.isEmpty()) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    @Override
+    public ItemStack getItem(int index) {
+        return this.items.get(index);
+    }
+
+    @Override
+    public ItemStack removeItem(int index, int count) {
+        ItemStack itemstack = this.items.get(index);
+        if (!itemstack.isEmpty()) {
+            if (itemstack.getCount() <= count) {
+                this.items.set(index, ItemStack.EMPTY);
+                this.setChanged();
+                return itemstack;
+            } else {
+                ItemStack result = itemstack.split(count);
+                this.setChanged();
+                return result;
+            }
+        }
+        return ItemStack.EMPTY;
+    }
+
+    @Override
+    public ItemStack removeItemNoUpdate(int index) {
+        ItemStack itemstack = this.items.get(index);
+        this.items.set(index, ItemStack.EMPTY);
+        return itemstack;
+    }
+
+    @Override
+    public void setItem(int index, ItemStack stack) {
+        this.items.set(index, stack);
+        if (stack.getCount() > this.getMaxStackSize()) {
+            stack.setCount(this.getMaxStackSize());
+        }
+        this.setChanged();
+    }
+
+    @Override
+    public boolean stillValid(Player player) {
+        return this.level != null && this.level.getBlockEntity(this.worldPosition) == this &&
+               player.distanceToSqr(this.worldPosition.getX() + 0.5, this.worldPosition.getY() + 0.5, this.worldPosition.getZ() + 0.5) <= 64.0;
+    }
+
+    @Override
+    public void clearContent() {
+        this.items.clear();
+    }
+
+    @Override
+    public boolean canPlaceItem(int index, ItemStack stack) {
+        // 只允许放置刷怪蛋
+        return stack.getItem() instanceof SpawnEggItem;
+    }
+
+    @Override
+    public void startOpen(Player player) {
+        // 当玩家打开容器时调用
+    }
+
+    @Override
+    public void stopOpen(Player player) {
+        // 当玩家关闭容器时调用
+    }
+
+    // 打开刷怪蛋界面的方法
+    public void openSpawnEggMenu(ServerPlayer player) {
+        player.openMenu(new net.minecraft.world.MenuProvider() {
+            @Override
+            public Component getDisplayName() {
+                return Component.translatable("container.examplemod.spawn_egg_mob_spawner");
+            }
+
+            @Override
+            public net.minecraft.world.inventory.AbstractContainerMenu createMenu(int containerId, net.minecraft.world.entity.player.Inventory playerInventory, net.minecraft.world.entity.player.Player player) {
+                return new com.example.examplemod.blockentity.SpawnEggMobSpawnerMenu(containerId, playerInventory, MobSpawnerBlockEntity.this);
+            }
+        }, (buf) -> {
+            buf.writeBlockPos(this.getBlockPos());
+        });
     }
 }

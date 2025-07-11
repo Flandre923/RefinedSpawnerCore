@@ -58,6 +58,8 @@ import com.example.examplemod.blockentity.MobSpawnerBlock;
 import com.example.examplemod.blockentity.MobSpawnerBlockEntity;
 import com.example.examplemod.blockentity.MobSpawnerMenu;
 import com.example.examplemod.blockentity.MobSpawnerScreen;
+import com.example.examplemod.blockentity.SpawnEggMobSpawnerMenu;
+import com.example.examplemod.blockentity.SpawnEggMobSpawnerScreen;
 import com.example.examplemod.network.MobSpawnerUpdatePacket;
 
 // The value here should match an entry in the META-INF/neoforge.mods.toml file
@@ -127,6 +129,10 @@ public class ExampleMod {
     // Mob Spawner Menu Type
     public static final DeferredHolder<MenuType<?>, MenuType<MobSpawnerMenu>> MOB_SPAWNER_MENU =
         MENU_TYPES.register("mob_spawner", () -> IMenuTypeExtension.create(MobSpawnerMenu::new));
+
+    // Spawn Egg Mob Spawner Menu Type
+    public static final DeferredHolder<MenuType<?>, MenuType<SpawnEggMobSpawnerMenu>> SPAWN_EGG_MOB_SPAWNER_MENU =
+        MENU_TYPES.register("spawn_egg_mob_spawner", () -> IMenuTypeExtension.create(SpawnEggMobSpawnerMenu::new));
 
     // Creates a creative tab with the id "examplemod:example_tab" for the example item, that is placed after the combat tab
     public static final DeferredHolder<CreativeModeTab, CreativeModeTab> EXAMPLE_TAB = CREATIVE_MODE_TABS.register("example_tab", () -> CreativeModeTab.builder()
@@ -232,6 +238,7 @@ public class ExampleMod {
         @SubscribeEvent
         public static void registerScreens(net.neoforged.neoforge.client.event.RegisterMenuScreensEvent event) {
             event.register(MOB_SPAWNER_MENU.get(), MobSpawnerScreen::new);
+            event.register(SPAWN_EGG_MOB_SPAWNER_MENU.get(), SpawnEggMobSpawnerScreen::new);
         }
     }
 }

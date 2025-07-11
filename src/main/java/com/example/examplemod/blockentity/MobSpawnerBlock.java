@@ -5,6 +5,7 @@ import com.mojang.serialization.MapCodec;
 import net.minecraft.core.BlockPos;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.util.RandomSource;
+import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.InteractionResult;
 import net.minecraft.world.entity.player.Player;
@@ -76,17 +77,37 @@ public class MobSpawnerBlock extends BaseEntityBlock {
         if (!level.isClientSide) {
             BlockEntity blockEntity = level.getBlockEntity(pos);
             if (blockEntity instanceof MobSpawnerBlockEntity spawner && player instanceof ServerPlayer serverPlayer) {
-                serverPlayer.openMenu(spawner, (buf) -> {
-                    buf.writeBlockPos(pos);
-                    // 发送当前的所有数据值到客户端
-                    buf.writeInt(spawner.getSpawnDelay());
-                    buf.writeInt(spawner.getMinSpawnDelay());
-                    buf.writeInt(spawner.getMaxSpawnDelay());
-                    buf.writeInt(spawner.getSpawnCount());
-                    buf.writeInt(spawner.getMaxNearbyEntities());
-                    buf.writeInt(spawner.getRequiredPlayerRange());
-                    buf.writeInt(spawner.getSpawnRange());
-                });
+                // 空手打开刷怪蛋界面
+                spawner.openSpawnEggMenu(serverPlayer);
+            }
+        }
+        return InteractionResult.SUCCESS;
+    }
+
+    @Override
+    protected InteractionResult useItemOn(ItemStack stack, BlockState state, Level level, BlockPos pos, Player player, InteractionHand hand, BlockHitResult hitResult) {
+        if (!level.isClientSide) {
+            BlockEntity blockEntity = level.getBlockEntity(pos);
+            if (blockEntity instanceof MobSpawnerBlockEntity spawner && player instanceof ServerPlayer serverPlayer) {
+                // 检查是否是木棍
+                if (stack.is(net.minecraft.world.item.Items.STICK)) {
+                    // 木棍打开调试界面
+                    serverPlayer.openMenu(spawner, (buf) -> {
+                        buf.writeBlockPos(pos);
+                        // 发送当前的所有数据值到客户端
+                        buf.writeInt(spawner.getSpawnDelay());
+                        buf.writeInt(spawner.getMinSpawnDelay());
+                        buf.writeInt(spawner.getMaxSpawnDelay());
+                        buf.writeInt(spawner.getSpawnCount());
+                        buf.writeInt(spawner.getMaxNearbyEntities());
+                        buf.writeInt(spawner.getRequiredPlayerRange());
+                        buf.writeInt(spawner.getSpawnRange());
+                    });
+                    return InteractionResult.SUCCESS;
+                } else {
+                    // 其他物品也打开刷怪蛋界面
+                    spawner.openSpawnEggMenu(serverPlayer);
+                }
             }
         }
         return InteractionResult.SUCCESS;
