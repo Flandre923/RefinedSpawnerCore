@@ -1,6 +1,7 @@
 package com.example.examplemod.blockentity;
 
 import com.example.examplemod.ExampleMod;
+import com.example.examplemod.client.SpawnAreaRenderer;
 import com.example.examplemod.network.MobSpawnerUpdatePacket;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.components.Button;
@@ -25,6 +26,8 @@ public class MobSpawnerScreen extends AbstractContainerScreen<MobSpawnerMenu> {
     private EditBox minSpawnDelayBox;
     private EditBox maxSpawnDelayBox;
     private EditBox requiredPlayerRangeBox;
+    private Button showAreaButton;
+    private static boolean showSpawnArea = false;
 
     public MobSpawnerScreen(MobSpawnerMenu menu, Inventory playerInventory, Component title) {
         super(menu, playerInventory, title);
@@ -46,6 +49,7 @@ public class MobSpawnerScreen extends AbstractContainerScreen<MobSpawnerMenu> {
         this.spawnRangeBox = new EditBox(this.font, x + 85, y, 40, 20, Component.literal(""));
         this.spawnRangeBox.setValue(String.valueOf(this.menu.getSpawnRange()));
         this.spawnRangeBox.setMaxLength(2);
+        this.spawnRangeBox.setResponder(this::onSpawnRangeChanged); // 添加实时响应
         this.addRenderableWidget(this.spawnRangeBox);
 
         y += spacing;
@@ -101,6 +105,17 @@ public class MobSpawnerScreen extends AbstractContainerScreen<MobSpawnerMenu> {
         // 应用按钮
         this.addRenderableWidget(Button.builder(Component.literal("Apply"), this::applyChanges)
                 .bounds(this.leftPos + 130, this.topPos + 140, 40, 20).build());
+
+        // 检查当前是否正在渲染这个刷怪器的区域
+        showSpawnArea = SpawnAreaRenderer.isRenderingAt(this.menu.getBlockPos());
+
+        // 显示/隐藏刷怪区域按钮
+        this.showAreaButton = Button.builder(
+            Component.literal(showSpawnArea ? "Hide Area" : "Show Area"),
+            this::toggleSpawnArea
+        ).bounds(this.leftPos + 8, this.topPos + 140, 70, 20).build();
+
+        this.addRenderableWidget(this.showAreaButton);
     }
 
     private void applyChanges(Button button) {
@@ -131,7 +146,13 @@ public class MobSpawnerScreen extends AbstractContainerScreen<MobSpawnerMenu> {
                 requiredPlayerRange
             );
             PacketDistributor.sendToServer(packet);
-            
+
+            // 如果当前正在显示刷怪区域，立即更新渲染范围
+            if (SpawnAreaRenderer.isRenderingAt(this.menu.getBlockPos())) {
+                SpawnAreaRenderer.updateSpawnRange(this.menu.getBlockPos(), spawnRange);
+                System.out.println("MobSpawnerScreen: Updated render range to " + spawnRange);
+            }
+
         } catch (NumberFormatException e) {
             // 处理无效输入
         }
@@ -153,5 +174,39 @@ public class MobSpawnerScreen extends AbstractContainerScreen<MobSpawnerMenu> {
     @Override
     protected void renderLabels(GuiGraphics guiGraphics, int mouseX, int mouseY) {
         guiGraphics.drawString(this.font, this.title, this.titleLabelX, this.titleLabelY, 4210752, false);
+    }
+
+    private void toggleSpawnArea(Button button) {
+        showSpawnArea = !showSpawnArea;
+        button.setMessage(Component.literal(showSpawnArea ? "Hide Area" : "Show Area"));
+
+        if (showSpawnArea) {
+            // 启动区域渲染，使用实际的刷怪范围
+            SpawnAreaRenderer.startRendering(this.menu.getBlockPos(), this.menu.getSpawnRange());
+        } else {
+            // 停止区域渲染
+            SpawnAreaRenderer.stopRendering();
+        }
+    }
+
+    private void onSpawnRangeChanged(String newValue) {
+        // 当刷怪范围输入框内容改变时，实时更新渲染
+        if (SpawnAreaRenderer.isRenderingAt(this.menu.getBlockPos())) {
+            try {
+                int newRange = Integer.parseInt(newValue);
+                newRange = Math.max(1, Math.min(16, newRange)); // 验证范围
+                SpawnAreaRenderer.updateSpawnRange(this.menu.getBlockPos(), newRange);
+                System.out.println("MobSpawnerScreen: Real-time updated render range to " + newRange);
+            } catch (NumberFormatException e) {
+                // 忽略无效输入，等待用户完成输入
+            }
+        }
+    }
+
+    @Override
+    public void removed() {
+        super.removed();
+        // 关闭界面时不自动停止渲染，让用户可以在关闭界面后继续看到区域
+        // 用户需要手动点击 "Hide Area" 按钮来停止渲染
     }
 }

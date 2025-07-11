@@ -60,7 +60,9 @@ import com.example.examplemod.blockentity.MobSpawnerMenu;
 import com.example.examplemod.blockentity.MobSpawnerScreen;
 import com.example.examplemod.blockentity.SpawnEggMobSpawnerMenu;
 import com.example.examplemod.blockentity.SpawnEggMobSpawnerScreen;
+import com.example.examplemod.client.SpawnAreaRenderer;
 import com.example.examplemod.network.MobSpawnerUpdatePacket;
+import com.example.examplemod.network.SpawnAreaDataPacket;
 
 // The value here should match an entry in the META-INF/neoforge.mods.toml file
 @Mod(ExampleMod.MODID)
@@ -201,6 +203,11 @@ public class ExampleMod {
             MobSpawnerUpdatePacket.STREAM_CODEC,
             MobSpawnerUpdatePacket::handle
         );
+        registrar.playToClient(
+            SpawnAreaDataPacket.TYPE,
+            SpawnAreaDataPacket.STREAM_CODEC,
+            SpawnAreaDataPacket::handle
+        );
     }
 
     // Add the example block item to the building blocks tab
@@ -239,6 +246,14 @@ public class ExampleMod {
         public static void registerScreens(net.neoforged.neoforge.client.event.RegisterMenuScreensEvent event) {
             event.register(MOB_SPAWNER_MENU.get(), MobSpawnerScreen::new);
             event.register(SPAWN_EGG_MOB_SPAWNER_MENU.get(), SpawnEggMobSpawnerScreen::new);
+        }
+
+        @SubscribeEvent
+        public static void onClientSetup(net.neoforged.neoforge.event.level.LevelEvent.Load event) {
+            // 在客户端预先注册SpawnAreaRenderer
+            if (event.getLevel().isClientSide()) {
+                net.neoforged.neoforge.common.NeoForge.EVENT_BUS.register(SpawnAreaRenderer.class);
+            }
         }
     }
 }

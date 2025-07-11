@@ -115,6 +115,13 @@ public class SpawnEggMobSpawnerMenu extends AbstractContainerMenu {
         return this.blockPos;
     }
 
+    public int getSpawnRange() {
+        if (this.container instanceof MobSpawnerBlockEntity spawner) {
+            return spawner.getSpawnRange();
+        }
+        return 4; // 默认范围
+    }
+
     // 自定义槽位类，只允许放置刷怪蛋
     private static class SpawnEggSlot extends Slot {
         public SpawnEggSlot(Container container, int index, int x, int y) {
