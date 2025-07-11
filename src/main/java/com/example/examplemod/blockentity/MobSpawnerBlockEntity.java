@@ -450,6 +450,8 @@ public class MobSpawnerBlockEntity extends BlockEntity implements MenuProvider, 
             }
         }, (buf) -> {
             buf.writeBlockPos(this.getBlockPos());
+            // 发送刷怪范围数据，确保客户端能获取到正确的值
+            buf.writeInt(this.getSpawnRange());
         });
     }
 }

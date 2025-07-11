@@ -17,24 +17,26 @@ public class SpawnEggMobSpawnerMenu extends AbstractContainerMenu {
     private final Container container;
     private final Level level;
     private final BlockPos blockPos;
+    private final int spawnRange; // 存储从服务端接收的刷怪范围
 
     // 客户端构造函数
     public SpawnEggMobSpawnerMenu(int containerId, Inventory playerInventory, FriendlyByteBuf extraData) {
-        this(containerId, playerInventory, new SimpleContainer(1), extraData.readBlockPos());
+        this(containerId, playerInventory, new SimpleContainer(1), extraData.readBlockPos(), extraData.readInt());
     }
 
     // 服务端构造函数
     public SpawnEggMobSpawnerMenu(int containerId, Inventory playerInventory, MobSpawnerBlockEntity blockEntity) {
-        this(containerId, playerInventory, blockEntity, blockEntity.getBlockPos());
+        this(containerId, playerInventory, blockEntity, blockEntity.getBlockPos(), blockEntity.getSpawnRange());
     }
 
     // 通用构造函数
-    public SpawnEggMobSpawnerMenu(int containerId, Inventory playerInventory, Container container, BlockPos blockPos) {
+    public SpawnEggMobSpawnerMenu(int containerId, Inventory playerInventory, Container container, BlockPos blockPos, int spawnRange) {
         super(ExampleMod.SPAWN_EGG_MOB_SPAWNER_MENU.get(), containerId);
         checkContainerSize(container, 1);
         this.container = container;
         this.level = playerInventory.player.level();
         this.blockPos = blockPos;
+        this.spawnRange = spawnRange;
 
         container.startOpen(playerInventory.player);
 
@@ -116,9 +118,23 @@ public class SpawnEggMobSpawnerMenu extends AbstractContainerMenu {
     }
 
     public int getSpawnRange() {
+        // 优先使用服务端发送的范围值
+        if (this.spawnRange > 0) {
+            return this.spawnRange;
+        }
+
         if (this.container instanceof MobSpawnerBlockEntity spawner) {
             return spawner.getSpawnRange();
         }
+
+        // 客户端情况：直接从世界中获取BlockEntity
+        if (this.level != null && this.level.isLoaded(this.blockPos)) {
+            var blockEntity = this.level.getBlockEntity(this.blockPos);
+            if (blockEntity instanceof MobSpawnerBlockEntity spawner) {
+                return spawner.getSpawnRange();
+            }
+        }
+
         return 4; // 默认范围
     }
 
