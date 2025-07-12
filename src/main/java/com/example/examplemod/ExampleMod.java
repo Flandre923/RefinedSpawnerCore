@@ -297,9 +297,10 @@ public class ExampleMod {
 
         @SubscribeEvent
         public static void onClientSetup(net.neoforged.neoforge.event.level.LevelEvent.Load event) {
-            // 在客户端预先注册SpawnAreaRenderer
+            // 在客户端预先注册SpawnAreaRenderer和ClientEventHandler
             if (event.getLevel().isClientSide()) {
                 net.neoforged.neoforge.common.NeoForge.EVENT_BUS.register(SpawnAreaRenderer.class);
+                net.neoforged.neoforge.common.NeoForge.EVENT_BUS.register(com.example.examplemod.client.ClientEventHandler.class);
             }
         }
     }

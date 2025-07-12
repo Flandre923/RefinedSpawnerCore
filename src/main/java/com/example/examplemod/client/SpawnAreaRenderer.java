@@ -69,6 +69,31 @@ public class SpawnAreaRenderer {
         return isRendering && pos.equals(spawnerPos);
     }
 
+    public static boolean isRendering() {
+        return isRendering;
+    }
+
+    public static BlockPos getSpawnerPos() {
+        return spawnerPos;
+    }
+
+    /**
+     * 检查当前渲染的刷怪器方块是否仍然存在
+     */
+    private static boolean isSpawnerBlockValid() {
+        if (!isRendering || spawnerPos == null) {
+            return false;
+        }
+
+        var minecraft = net.minecraft.client.Minecraft.getInstance();
+        if (minecraft.level == null || !minecraft.level.isLoaded(spawnerPos)) {
+            return false;
+        }
+
+        var blockEntity = minecraft.level.getBlockEntity(spawnerPos);
+        return blockEntity instanceof com.example.examplemod.blockentity.MobSpawnerBlockEntity;
+    }
+
     /**
      * 获取当前有效的刷怪范围（考虑模块增强）
      */
@@ -98,6 +123,14 @@ public class SpawnAreaRenderer {
     @SubscribeEvent
     public static void onRenderLevel(RenderLevelStageEvent.AfterEntities event) {
         if (!isRendering || spawnerPos == null) {
+            return;
+        }
+
+        // 检查刷怪器方块是否仍然存在
+        if (!isSpawnerBlockValid()) {
+            // 如果方块不存在，自动停止渲染
+            stopRendering();
+            System.out.println("SpawnAreaRenderer: Spawner block no longer exists, stopping render");
             return;
         }
 
