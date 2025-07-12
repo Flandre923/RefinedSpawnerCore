@@ -49,6 +49,11 @@ public class MobSpawnerBlockEntity extends BlockEntity implements MenuProvider, 
     private int requiredPlayerRange = 16;
     private int spawnRange = SPAWN_RANGE;
 
+    // 生成位置偏移
+    private int offsetX = 0;
+    private int offsetY = 0;
+    private int offsetZ = 0;
+
     // 物品槽位 - 用于存储刷怪蛋
     private NonNullList<ItemStack> items = NonNullList.withSize(1, ItemStack.EMPTY);
 
@@ -162,11 +167,12 @@ public class MobSpawnerBlockEntity extends BlockEntity implements MenuProvider, 
             entityType = spawnerData.type();
         }
 
-        // 在9x9x9区域内随机选择生成位置
+        // 在指定区域内随机选择生成位置，考虑偏移
+        BlockPos centerPos = spawnerPos.offset(offsetX, offsetY, offsetZ);
         for (int attempts = 0; attempts < 50; attempts++) {
-            int x = spawnerPos.getX() + random.nextInt(2 * spawnRange + 1) - spawnRange;
-            int z = spawnerPos.getZ() + random.nextInt(2 * spawnRange + 1) - spawnRange;
-            int y = spawnerPos.getY() + random.nextInt(2 * spawnRange + 1) - spawnRange; // 在9x9x9空间内生成
+            int x = centerPos.getX() + random.nextInt(2 * spawnRange + 1) - spawnRange;
+            int z = centerPos.getZ() + random.nextInt(2 * spawnRange + 1) - spawnRange;
+            int y = centerPos.getY() + random.nextInt(2 * spawnRange + 1) - spawnRange;
 
             BlockPos spawnPos = new BlockPos(x, y, z);
 
@@ -215,6 +221,11 @@ public class MobSpawnerBlockEntity extends BlockEntity implements MenuProvider, 
         output.putInt("RequiredPlayerRange", this.requiredPlayerRange);
         output.putInt("SpawnRange", this.spawnRange);
 
+        // 保存偏移数据
+        output.putInt("OffsetX", this.offsetX);
+        output.putInt("OffsetY", this.offsetY);
+        output.putInt("OffsetZ", this.offsetZ);
+
         // 保存物品数据
         ContainerHelper.saveAllItems(output, this.items);
     }
@@ -231,6 +242,11 @@ public class MobSpawnerBlockEntity extends BlockEntity implements MenuProvider, 
         this.maxNearbyEntities = input.getInt("MaxNearbyEntities").orElse(this.maxNearbyEntities);
         this.requiredPlayerRange = input.getInt("RequiredPlayerRange").orElse(this.requiredPlayerRange);
         this.spawnRange = input.getInt("SpawnRange").orElse(this.spawnRange) ;
+
+        // 加载偏移数据
+        this.offsetX = input.getInt("OffsetX").orElse(0);
+        this.offsetY = input.getInt("OffsetY").orElse(0);
+        this.offsetZ = input.getInt("OffsetZ").orElse(0);
 
         // 加载物品数据
         this.items = NonNullList.withSize(this.getContainerSize(), ItemStack.EMPTY);
@@ -304,6 +320,26 @@ public class MobSpawnerBlockEntity extends BlockEntity implements MenuProvider, 
     public int getMaxNearbyEntities() { return this.maxNearbyEntities; }
     public int getRequiredPlayerRange() { return this.requiredPlayerRange; }
     public int getSpawnRange() { return this.spawnRange; }
+
+    // 偏移位置的getter和setter
+    public int getOffsetX() { return this.offsetX; }
+    public int getOffsetY() { return this.offsetY; }
+    public int getOffsetZ() { return this.offsetZ; }
+
+    public void setOffsetX(int offsetX) {
+        this.offsetX = offsetX;
+        this.setChanged();
+    }
+
+    public void setOffsetY(int offsetY) {
+        this.offsetY = offsetY;
+        this.setChanged();
+    }
+
+    public void setOffsetZ(int offsetZ) {
+        this.offsetZ = offsetZ;
+        this.setChanged();
+    }
 
 
     /**
@@ -452,6 +488,10 @@ public class MobSpawnerBlockEntity extends BlockEntity implements MenuProvider, 
             buf.writeBlockPos(this.getBlockPos());
             // 发送刷怪范围数据，确保客户端能获取到正确的值
             buf.writeInt(this.getSpawnRange());
+            // 发送偏移数据
+            buf.writeInt(this.getOffsetX());
+            buf.writeInt(this.getOffsetY());
+            buf.writeInt(this.getOffsetZ());
         });
     }
 }

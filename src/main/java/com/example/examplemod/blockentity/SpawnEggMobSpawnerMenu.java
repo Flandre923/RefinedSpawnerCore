@@ -18,25 +18,32 @@ public class SpawnEggMobSpawnerMenu extends AbstractContainerMenu {
     private final Level level;
     private final BlockPos blockPos;
     private final int spawnRange; // 存储从服务端接收的刷怪范围
+    private final int offsetX, offsetY, offsetZ; // 存储从服务端接收的偏移数据
 
     // 客户端构造函数
     public SpawnEggMobSpawnerMenu(int containerId, Inventory playerInventory, FriendlyByteBuf extraData) {
-        this(containerId, playerInventory, new SimpleContainer(1), extraData.readBlockPos(), extraData.readInt());
+        this(containerId, playerInventory, new SimpleContainer(1), extraData.readBlockPos(), extraData.readInt(),
+             extraData.readInt(), extraData.readInt(), extraData.readInt());
     }
 
     // 服务端构造函数
     public SpawnEggMobSpawnerMenu(int containerId, Inventory playerInventory, MobSpawnerBlockEntity blockEntity) {
-        this(containerId, playerInventory, blockEntity, blockEntity.getBlockPos(), blockEntity.getSpawnRange());
+        this(containerId, playerInventory, blockEntity, blockEntity.getBlockPos(), blockEntity.getSpawnRange(),
+             blockEntity.getOffsetX(), blockEntity.getOffsetY(), blockEntity.getOffsetZ());
     }
 
     // 通用构造函数
-    public SpawnEggMobSpawnerMenu(int containerId, Inventory playerInventory, Container container, BlockPos blockPos, int spawnRange) {
+    public SpawnEggMobSpawnerMenu(int containerId, Inventory playerInventory, Container container, BlockPos blockPos,
+                                 int spawnRange, int offsetX, int offsetY, int offsetZ) {
         super(ExampleMod.SPAWN_EGG_MOB_SPAWNER_MENU.get(), containerId);
         checkContainerSize(container, 1);
         this.container = container;
         this.level = playerInventory.player.level();
         this.blockPos = blockPos;
         this.spawnRange = spawnRange;
+        this.offsetX = offsetX;
+        this.offsetY = offsetY;
+        this.offsetZ = offsetZ;
 
         container.startOpen(playerInventory.player);
 
@@ -136,6 +143,18 @@ public class SpawnEggMobSpawnerMenu extends AbstractContainerMenu {
         }
 
         return 4; // 默认范围
+    }
+
+    public int getOffsetX() {
+        return this.offsetX;
+    }
+
+    public int getOffsetY() {
+        return this.offsetY;
+    }
+
+    public int getOffsetZ() {
+        return this.offsetZ;
     }
 
     // 自定义槽位类，只允许放置刷怪蛋

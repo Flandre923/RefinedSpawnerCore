@@ -20,6 +20,7 @@ public class SpawnAreaRenderer {
     private static boolean isRendering = false;
     private static BlockPos spawnerPos = null;
     private static int spawnRange = 4; // 默认刷怪范围
+    private static int offsetX = 0, offsetY = 0, offsetZ = 0; // 偏移位置
     private static boolean isRegistered = false;
 
     public static void startRendering(BlockPos pos) {
@@ -27,10 +28,17 @@ public class SpawnAreaRenderer {
     }
 
     public static void startRendering(BlockPos pos, int range) {
+        startRendering(pos, range, 0, 0, 0);
+    }
+
+    public static void startRendering(BlockPos pos, int range, int offX, int offY, int offZ) {
         spawnerPos = pos;
         spawnRange = range;
+        offsetX = offX;
+        offsetY = offY;
+        offsetZ = offZ;
         isRendering = true;
-        System.out.println("SpawnAreaRenderer: Starting rendering at " + pos + " with range " + range);
+        System.out.println("SpawnAreaRenderer: Starting rendering at " + pos + " with range " + range + " offset(" + offX + "," + offY + "," + offZ + ")");
         // 事件处理器应该已经在ExampleMod中注册了
     }
 
@@ -44,6 +52,15 @@ public class SpawnAreaRenderer {
     public static void updateSpawnRange(BlockPos pos, int range) {
         if (isRendering && pos.equals(spawnerPos)) {
             spawnRange = range;
+        }
+    }
+
+    public static void updateSpawnOffset(BlockPos pos, int offX, int offY, int offZ) {
+        if (isRendering && pos.equals(spawnerPos)) {
+            offsetX = offX;
+            offsetY = offY;
+            offsetZ = offZ;
+            System.out.println("SpawnAreaRenderer: Updated offset to (" + offX + "," + offY + "," + offZ + ")");
         }
     }
 
@@ -94,10 +111,11 @@ public class SpawnAreaRenderer {
     }
     
     private static void renderSpawnArea(PoseStack poseStack, MultiBufferSource bufferSource, BlockPos center, int range) {
-        // 创建刷怪区域的AABB
+        // 创建刷怪区域的AABB，考虑偏移
+        BlockPos actualCenter = center.offset(offsetX, offsetY, offsetZ);
         AABB spawnArea = new AABB(
-            center.getX() - range, center.getY() - range, center.getZ() - range,
-            center.getX() + range + 1, center.getY() + range + 1, center.getZ() + range + 1
+            actualCenter.getX() - range, actualCenter.getY() - range, actualCenter.getZ() - range,
+            actualCenter.getX() + range + 1, actualCenter.getY() + range + 1, actualCenter.getZ() + range + 1
         );
         
         // 使用更简单的渲染类型

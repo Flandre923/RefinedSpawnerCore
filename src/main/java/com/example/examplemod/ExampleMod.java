@@ -63,6 +63,7 @@ import com.example.examplemod.blockentity.SpawnEggMobSpawnerScreen;
 import com.example.examplemod.client.SpawnAreaRenderer;
 import com.example.examplemod.network.MobSpawnerUpdatePacket;
 import com.example.examplemod.network.SpawnAreaDataPacket;
+import com.example.examplemod.network.SpawnOffsetUpdatePacket;
 
 // The value here should match an entry in the META-INF/neoforge.mods.toml file
 @Mod(ExampleMod.MODID)
@@ -202,6 +203,11 @@ public class ExampleMod {
             MobSpawnerUpdatePacket.TYPE,
             MobSpawnerUpdatePacket.STREAM_CODEC,
             MobSpawnerUpdatePacket::handle
+        );
+        registrar.playToServer(
+            SpawnOffsetUpdatePacket.TYPE,
+            SpawnOffsetUpdatePacket.STREAM_CODEC,
+            SpawnOffsetUpdatePacket::handle
         );
         registrar.playToClient(
             SpawnAreaDataPacket.TYPE,
