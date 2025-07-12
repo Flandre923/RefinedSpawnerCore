@@ -2,6 +2,9 @@ package com.example.examplemod.blockentity;
 
 import com.example.examplemod.ExampleMod;
 import com.example.examplemod.client.SpawnAreaRenderer;
+import com.example.examplemod.client.TransparentItemRenderer;
+import com.example.examplemod.client.SlotHintManager;
+import com.example.examplemod.spawner.SpawnerModuleType;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.screens.inventory.AbstractContainerScreen;
@@ -9,6 +12,7 @@ import net.minecraft.client.renderer.RenderPipelines;
 import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.entity.player.Inventory;
+import net.minecraft.world.item.ItemStack;
 import net.neoforged.api.distmarker.Dist;
 import net.neoforged.api.distmarker.OnlyIn;
 
@@ -35,6 +39,9 @@ public class SpawnEggMobSpawnerScreen extends AbstractContainerScreen<SpawnEggMo
     @Override
     protected void init() {
         super.init();
+
+        // 初始化槽位提示系统
+        SlotHintManager.initializeHints();
 
         // 检查当前是否正在渲染这个刷怪器的区域
         showSpawnArea = SpawnAreaRenderer.isRenderingAt(this.menu.getBlockPos());
@@ -92,6 +99,9 @@ public class SpawnEggMobSpawnerScreen extends AbstractContainerScreen<SpawnEggMo
 
         // 渲染槽位工具提示（方法已简化，避免API兼容性问题）
         renderSlotTooltips(guiGraphics, mouseX, mouseY);
+
+        // 渲染槽位半透明提示
+        renderSlotHints(guiGraphics);
 
         // 检查刷怪范围是否改变，如果改变则更新渲染和显示
         int menuRange = this.menu.getSpawnRange();
@@ -247,6 +257,46 @@ public class SpawnEggMobSpawnerScreen extends AbstractContainerScreen<SpawnEggMo
     private void renderSlotTooltips(GuiGraphics guiGraphics, int mouseX, int mouseY) {
         // 工具提示功能暂时禁用，等待API兼容性修复
         // 槽位标签已经提供了足够的信息指导用户
+    }
+
+    /**
+     * 渲染槽位半透明提示
+     */
+    private void renderSlotHints(GuiGraphics guiGraphics) {
+        // 定义每个槽位允许的模块类型
+        SpawnerModuleType[] slotTypes = {
+            SpawnerModuleType.RANGE_REDUCER,    // 槽位0
+            SpawnerModuleType.RANGE_EXPANDER,   // 槽位1
+            SpawnerModuleType.MIN_DELAY_REDUCER, // 槽位2
+            SpawnerModuleType.MAX_DELAY_REDUCER, // 槽位3
+            SpawnerModuleType.COUNT_BOOSTER,    // 槽位4
+            SpawnerModuleType.PLAYER_IGNORER    // 槽位5
+        };
+
+        // 获取当前游戏时间用于脉动效果
+        long gameTime = System.currentTimeMillis();
+
+        // 为每个空槽位渲染半透明提示
+        for (int i = 0; i < 6; i++) {
+            // 计算槽位的屏幕坐标
+            int slotX = this.leftPos + 8 + (i % 3) * 18;
+            int slotY = this.topPos + 55 + (i / 3) * 18;
+
+            // 检查槽位是否为空
+            if (this.menu.slots.size() > i + 1) { // +1 因为第一个槽位是刷怪蛋
+                var slot = this.menu.slots.get(i + 1);
+                if (slot.getItem().isEmpty()) {
+                    // 获取对应的提示物品
+                    ItemStack hintItem = SlotHintManager.getHintItem(slotTypes[i]);
+                    if (!hintItem.isEmpty()) {
+                        // 渲染简单的半透明提示（使用兼容的方法）
+                        TransparentItemRenderer.renderSimpleTransparentItem(
+                            guiGraphics, hintItem, slotX, slotY
+                        );
+                    }
+                }
+            }
+        }
     }
 
     @Override
