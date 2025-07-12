@@ -22,5 +22,24 @@
   "examplemod.configuration.items": "Item List",
   "examplemod.configuration.logDirtBlock": "Log Dirt Block",
   "examplemod.configuration.magicNumberIntroduction": "Magic Number Text",
-  "examplemod.configuration.magicNumber": "Magic Number"
+  "examplemod.configuration.magicNumber": "Magic Number",
+
+  "gui.examplemod.spawn_egg": "Spawn Egg:",
+  "gui.examplemod.spawn_egg_instruction": "Place a spawn egg to specify mob type",
+  "gui.examplemod.offset": "Offset: X=%d Y=%d Z=%d",
+  "gui.examplemod.redstone_mode": "Mode: %s",
+  "gui.examplemod.modules": "Modules:",
+  "gui.examplemod.show_area": "Show Area",
+  "gui.examplemod.hide_area": "Hide Area",
+  "gui.examplemod.spawn_range": "Spawn Range:",
+  "gui.examplemod.max_nearby_entities": "Max Nearby:",
+  "gui.examplemod.spawn_count": "Spawn Count:",
+  "gui.examplemod.min_spawn_delay": "Min Delay:",
+  "gui.examplemod.max_spawn_delay": "Max Delay:",
+  "gui.examplemod.required_player_range": "Player Range:",
+  "gui.examplemod.apply": "Apply",
+
+  "redstone.mode.always": "Always",
+  "redstone.mode.no_signal": "No Signal",
+  "redstone.mode.with_signal": "With Signal"
 }

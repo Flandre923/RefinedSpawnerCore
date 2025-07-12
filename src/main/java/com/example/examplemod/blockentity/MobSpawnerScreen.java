@@ -44,7 +44,7 @@ public class MobSpawnerScreen extends AbstractContainerScreen<MobSpawnerMenu> {
         int spacing = 22;
 
         // 生成范围
-        this.addRenderableWidget(Button.builder(Component.literal("Spawn Range:"), (button) -> {})
+        this.addRenderableWidget(Button.builder(Component.translatable("gui.examplemod.spawn_range"), (button) -> {})
                 .bounds(x, y, 80, 20).build());
         this.spawnRangeBox = new EditBox(this.font, x + 85, y, 40, 20, Component.literal(""));
         this.spawnRangeBox.setValue(String.valueOf(this.menu.getSpawnRange()));
@@ -55,7 +55,7 @@ public class MobSpawnerScreen extends AbstractContainerScreen<MobSpawnerMenu> {
         y += spacing;
 
         // 最大附近实体数量
-        this.addRenderableWidget(Button.builder(Component.literal("Max Entities:"), (button) -> {})
+        this.addRenderableWidget(Button.builder(Component.translatable("gui.examplemod.max_nearby_entities"), (button) -> {})
                 .bounds(x, y, 80, 20).build());
         this.maxNearbyEntitiesBox = new EditBox(this.font, x + 85, y, 40, 20, Component.literal(""));
         this.maxNearbyEntitiesBox.setValue(String.valueOf(this.menu.getMaxNearbyEntities()));
@@ -65,7 +65,7 @@ public class MobSpawnerScreen extends AbstractContainerScreen<MobSpawnerMenu> {
         y += spacing;
 
         // 生成数量
-        this.addRenderableWidget(Button.builder(Component.literal("Spawn Count:"), (button) -> {})
+        this.addRenderableWidget(Button.builder(Component.translatable("gui.examplemod.spawn_count"), (button) -> {})
                 .bounds(x, y, 80, 20).build());
         this.spawnCountBox = new EditBox(this.font, x + 85, y, 40, 20, Component.literal(""));
         this.spawnCountBox.setValue(String.valueOf(this.menu.getSpawnCount()));
@@ -75,7 +75,7 @@ public class MobSpawnerScreen extends AbstractContainerScreen<MobSpawnerMenu> {
         y += spacing;
 
         // 最小生成延迟
-        this.addRenderableWidget(Button.builder(Component.literal("Min Delay:"), (button) -> {})
+        this.addRenderableWidget(Button.builder(Component.translatable("gui.examplemod.min_spawn_delay"), (button) -> {})
                 .bounds(x, y, 80, 20).build());
         this.minSpawnDelayBox = new EditBox(this.font, x + 85, y, 40, 20, Component.literal(""));
         this.minSpawnDelayBox.setValue(String.valueOf(this.menu.getMinSpawnDelay()));
@@ -85,7 +85,7 @@ public class MobSpawnerScreen extends AbstractContainerScreen<MobSpawnerMenu> {
         y += spacing;
 
         // 最大生成延迟
-        this.addRenderableWidget(Button.builder(Component.literal("Max Delay:"), (button) -> {})
+        this.addRenderableWidget(Button.builder(Component.translatable("gui.examplemod.max_spawn_delay"), (button) -> {})
                 .bounds(x, y, 80, 20).build());
         this.maxSpawnDelayBox = new EditBox(this.font, x + 85, y, 40, 20, Component.literal(""));
         this.maxSpawnDelayBox.setValue(String.valueOf(this.menu.getMaxSpawnDelay()));
@@ -95,7 +95,7 @@ public class MobSpawnerScreen extends AbstractContainerScreen<MobSpawnerMenu> {
         y += spacing;
 
         // 玩家激活范围
-        this.addRenderableWidget(Button.builder(Component.literal("Player Range:"), (button) -> {})
+        this.addRenderableWidget(Button.builder(Component.translatable("gui.examplemod.required_player_range"), (button) -> {})
                 .bounds(x, y, 80, 20).build());
         this.requiredPlayerRangeBox = new EditBox(this.font, x + 85, y, 40, 20, Component.literal(""));
         this.requiredPlayerRangeBox.setValue(String.valueOf(this.menu.getRequiredPlayerRange()));
@@ -103,7 +103,7 @@ public class MobSpawnerScreen extends AbstractContainerScreen<MobSpawnerMenu> {
         this.addRenderableWidget(this.requiredPlayerRangeBox);
 
         // 应用按钮
-        this.addRenderableWidget(Button.builder(Component.literal("Apply"), this::applyChanges)
+        this.addRenderableWidget(Button.builder(Component.translatable("gui.examplemod.apply"), this::applyChanges)
                 .bounds(this.leftPos + 130, this.topPos + 140, 40, 20).build());
 
         // 检查当前是否正在渲染这个刷怪器的区域
@@ -111,7 +111,7 @@ public class MobSpawnerScreen extends AbstractContainerScreen<MobSpawnerMenu> {
 
         // 显示/隐藏刷怪区域按钮
         this.showAreaButton = Button.builder(
-            Component.literal(showSpawnArea ? "Hide Area" : "Show Area"),
+            Component.translatable(showSpawnArea ? "gui.examplemod.hide_area" : "gui.examplemod.show_area"),
             this::toggleSpawnArea
         ).bounds(this.leftPos + 8, this.topPos + 140, 70, 20).build();
 
@@ -178,7 +178,7 @@ public class MobSpawnerScreen extends AbstractContainerScreen<MobSpawnerMenu> {
 
     private void toggleSpawnArea(Button button) {
         showSpawnArea = !showSpawnArea;
-        button.setMessage(Component.literal(showSpawnArea ? "Hide Area" : "Show Area"));
+        button.setMessage(Component.translatable(showSpawnArea ? "gui.examplemod.hide_area" : "gui.examplemod.show_area"));
 
         if (showSpawnArea) {
             // 启动区域渲染，使用实际的刷怪范围

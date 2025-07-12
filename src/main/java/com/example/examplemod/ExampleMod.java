@@ -64,6 +64,8 @@ import com.example.examplemod.client.SpawnAreaRenderer;
 import com.example.examplemod.network.MobSpawnerUpdatePacket;
 import com.example.examplemod.network.SpawnAreaDataPacket;
 import com.example.examplemod.network.SpawnOffsetUpdatePacket;
+import com.example.examplemod.network.RedstoneModeUpdatePacket;
+import com.example.examplemod.network.RedstoneModeClientSyncPacket;
 import com.example.examplemod.item.SpawnerModuleItem;
 import com.example.examplemod.spawner.SpawnerModuleType;
 
@@ -249,6 +251,16 @@ public class ExampleMod {
             SpawnOffsetUpdatePacket.TYPE,
             SpawnOffsetUpdatePacket.STREAM_CODEC,
             SpawnOffsetUpdatePacket::handle
+        );
+        registrar.playToServer(
+            RedstoneModeUpdatePacket.TYPE,
+            RedstoneModeUpdatePacket.STREAM_CODEC,
+            RedstoneModeUpdatePacket::handleServer
+        );
+        registrar.playToClient(
+            RedstoneModeClientSyncPacket.TYPE,
+            RedstoneModeClientSyncPacket.STREAM_CODEC,
+            RedstoneModeClientSyncPacket::handleClient
         );
         registrar.playToClient(
             SpawnAreaDataPacket.TYPE,

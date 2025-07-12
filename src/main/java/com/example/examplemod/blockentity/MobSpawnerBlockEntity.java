@@ -1,6 +1,9 @@
 package com.example.examplemod.blockentity;
 
 import com.example.examplemod.ExampleMod;
+import com.example.examplemod.redstone.RedstoneMode;
+import net.minecraft.core.HolderLookup;
+import net.minecraft.nbt.CompoundTag;
 import net.minecraft.core.BlockPos;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.util.RandomSource;
@@ -62,6 +65,9 @@ public class MobSpawnerBlockEntity extends BlockEntity implements MenuProvider, 
     // 模块管理器 - 管理刷怪器增强模块
     private SpawnerModuleManager moduleManager = new SpawnerModuleManager(6); // 6个模块槽位
 
+    // 红石控制模式
+    private RedstoneMode redstoneMode = RedstoneMode.ALWAYS; // 默认始终工作
+
     // ContainerData for GUI synchronization
     private final ContainerData dataAccess = new ContainerData() {
         @Override
@@ -114,6 +120,11 @@ public class MobSpawnerBlockEntity extends BlockEntity implements MenuProvider, 
 
         ServerLevel serverLevel = (ServerLevel) level;
         
+        // 检查红石控制条件
+        if (!blockEntity.shouldWorkWithRedstone()) {
+            return; // 红石条件不满足，停止工作
+        }
+
         // 检查是否有玩家在附近（考虑模块效果）
         if (!blockEntity.moduleManager.shouldIgnorePlayer()) {
             if (!serverLevel.hasNearbyAlivePlayer(pos.getX() + 0.5, pos.getY() + 0.5, pos.getZ() + 0.5, blockEntity.requiredPlayerRange)) {
@@ -255,6 +266,9 @@ public class MobSpawnerBlockEntity extends BlockEntity implements MenuProvider, 
         output.putInt("OffsetY", this.offsetY);
         output.putInt("OffsetZ", this.offsetZ);
 
+        // 保存红石控制模式
+        output.putString("RedstoneMode", this.redstoneMode.getSerializedName());
+
         // 保存物品数据
         ContainerHelper.saveAllItems(output, this.items);
 
@@ -279,6 +293,10 @@ public class MobSpawnerBlockEntity extends BlockEntity implements MenuProvider, 
         this.offsetX = input.getInt("OffsetX").orElse(0);
         this.offsetY = input.getInt("OffsetY").orElse(0);
         this.offsetZ = input.getInt("OffsetZ").orElse(0);
+
+        // 加载红石控制模式
+        String redstoneModeStr = input.getString("RedstoneMode").orElse("always");
+        this.redstoneMode = RedstoneMode.fromString(redstoneModeStr);
 
         // 加载物品数据
         this.items = NonNullList.withSize(this.getContainerSize(), ItemStack.EMPTY);
@@ -380,6 +398,82 @@ public class MobSpawnerBlockEntity extends BlockEntity implements MenuProvider, 
     // 模块管理器相关方法
     public SpawnerModuleManager getModuleManager() {
         return moduleManager;
+    }
+
+    /**
+     * 获取当前红石控制模式
+     */
+    public RedstoneMode getRedstoneMode() {
+        return redstoneMode;
+    }
+
+    /**
+     * 设置红石控制模式
+     */
+    public void setRedstoneMode(RedstoneMode mode) {
+        this.redstoneMode = mode;
+        setChanged();
+
+        // 同步到客户端
+        if (level != null && !level.isClientSide) {
+            level.sendBlockUpdated(worldPosition, getBlockState(), getBlockState(), 3);
+
+            // 发送专门的客户端同步包给附近的玩家
+            var syncPacket = new com.example.examplemod.network.RedstoneModeClientSyncPacket(worldPosition, mode);
+            net.neoforged.neoforge.network.PacketDistributor.sendToPlayersNear(
+                (net.minecraft.server.level.ServerLevel) level,
+                null, // 不排除任何玩家
+                worldPosition.getX(),
+                worldPosition.getY(),
+                worldPosition.getZ(),
+                64.0, // 64格范围内的玩家
+                syncPacket
+            );
+        }
+
+        System.out.println("MobSpawnerBlockEntity: Set redstone mode to " + mode.getDisplayName() + " at " + worldPosition);
+    }
+
+    /**
+     * 客户端专用的红石模式设置方法（不触发保存和同步）
+     */
+    public void setRedstoneModeClient(RedstoneMode mode) {
+        this.redstoneMode = mode;
+        System.out.println("MobSpawnerBlockEntity: Client-side redstone mode updated to " + mode.getDisplayName() + " at " + worldPosition);
+    }
+
+    @Override
+    public CompoundTag getUpdateTag(HolderLookup.Provider registries) {
+        CompoundTag tag = super.getUpdateTag(registries);
+        tag.putString("RedstoneMode", this.redstoneMode.getSerializedName());
+        return tag;
+    }
+
+    @Override
+    public void handleUpdateTag(ValueInput input) {
+        super.handleUpdateTag(input);
+        input.getString("RedstoneMode").ifPresent((mode)->{
+            this.redstoneMode = RedstoneMode.fromString(mode);
+            System.out.println("MobSpawnerBlockEntity: Client received redstone mode update: " + this.redstoneMode.getDisplayName());
+        });
+    }
+
+    /**
+     * 获取当前位置的红石信号强度
+     */
+    private int getRedstonePower() {
+        if (level == null) {
+            return 0;
+        }
+        return level.getBestNeighborSignal(worldPosition);
+    }
+
+    /**
+     * 检查是否应该根据红石模式工作
+     */
+    private boolean shouldWorkWithRedstone() {
+        int redstonePower = getRedstonePower();
+        return redstoneMode.shouldWork(redstonePower);
     }
 
 

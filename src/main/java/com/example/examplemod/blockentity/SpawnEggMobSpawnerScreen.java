@@ -5,6 +5,8 @@ import com.example.examplemod.client.SpawnAreaRenderer;
 import com.example.examplemod.client.TransparentItemRenderer;
 import com.example.examplemod.client.SlotHintManager;
 import com.example.examplemod.spawner.SpawnerModuleType;
+import com.example.examplemod.redstone.RedstoneMode;
+import com.example.examplemod.network.RedstoneModeUpdatePacket;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.screens.inventory.AbstractContainerScreen;
@@ -15,6 +17,7 @@ import net.minecraft.world.entity.player.Inventory;
 import net.minecraft.world.item.ItemStack;
 import net.neoforged.api.distmarker.Dist;
 import net.neoforged.api.distmarker.OnlyIn;
+import net.neoforged.neoforge.network.PacketDistributor;
 
 @OnlyIn(Dist.CLIENT)
 public class SpawnEggMobSpawnerScreen extends AbstractContainerScreen<SpawnEggMobSpawnerMenu> {
@@ -24,6 +27,8 @@ public class SpawnEggMobSpawnerScreen extends AbstractContainerScreen<SpawnEggMo
     private Button xMinusButton, xPlusButton;
     private Button yMinusButton, yPlusButton;
     private Button zMinusButton, zPlusButton;
+    // 红石控制按钮
+    private Button redstoneButton;
     private static boolean showSpawnArea = false;
     private int lastKnownRange = -1;
     private int currentRange = 4;
@@ -54,7 +59,7 @@ public class SpawnEggMobSpawnerScreen extends AbstractContainerScreen<SpawnEggMo
 
         // 添加显示/隐藏刷怪区域的按钮
         this.showAreaButton = Button.builder(
-            Component.literal(showSpawnArea ? "Hide Area" : "Show Area"),
+            Component.translatable(showSpawnArea ? "gui.examplemod.hide_area" : "gui.examplemod.show_area"),
             this::toggleSpawnArea
         ).bounds(this.leftPos + 100, this.topPos + 55, 70, 20).build();
 
@@ -89,6 +94,56 @@ public class SpawnEggMobSpawnerScreen extends AbstractContainerScreen<SpawnEggMo
         this.addRenderableWidget(this.yPlusButton);
         this.addRenderableWidget(this.zMinusButton);
         this.addRenderableWidget(this.zPlusButton);
+
+        // 添加红石控制按钮（移动到右上方）
+        RedstoneMode currentMode = getCurrentRedstoneMode();
+        this.redstoneButton = Button.builder(currentMode.getLocalizedName(), (btn) -> toggleRedstoneMode())
+            .bounds(this.leftPos + 120, this.topPos + 20, 50, 16).build();
+        this.addRenderableWidget(this.redstoneButton);
+    }
+
+    @Override
+    public void containerTick() {
+        super.containerTick();
+        // 定期更新红石按钮状态，确保与服务器同步
+        updateRedstoneButton();
+        // 更新偏移显示
+        updateOffsetDisplay();
+    }
+
+    // 缓存上次的红石模式，避免频繁更新
+    private RedstoneMode lastRedstoneMode = null;
+
+    /**
+     * 更新红石按钮的显示状态
+     */
+    private void updateRedstoneButton() {
+        if (this.redstoneButton != null) {
+            RedstoneMode currentMode = getCurrentRedstoneMode();
+            // 只有当模式真正改变时才更新按钮
+            if (lastRedstoneMode != currentMode) {
+                this.redstoneButton.setMessage(currentMode.getLocalizedName());
+                lastRedstoneMode = currentMode;
+                System.out.println("SpawnEggMobSpawnerScreen: Button updated to " + currentMode.getDisplayName());
+            }
+        }
+    }
+
+    /**
+     * 更新偏移显示
+     */
+    private void updateOffsetDisplay() {
+        // 从菜单获取最新的偏移值
+        int newOffsetX = this.menu.getOffsetX();
+        int newOffsetY = this.menu.getOffsetY();
+        int newOffsetZ = this.menu.getOffsetZ();
+
+        // 如果偏移值发生变化，更新本地缓存
+        if (newOffsetX != offsetX || newOffsetY != offsetY || newOffsetZ != offsetZ) {
+            offsetX = newOffsetX;
+            offsetY = newOffsetY;
+            offsetZ = newOffsetZ;
+        }
     }
 
     @Override
@@ -144,18 +199,23 @@ public class SpawnEggMobSpawnerScreen extends AbstractContainerScreen<SpawnEggMo
         guiGraphics.drawString(this.font, this.playerInventoryTitle, this.inventoryLabelX, this.inventoryLabelY, 4210752, false);
 
         // 添加说明文字
-        Component spawnEggText = Component.literal("Spawn Egg:");
+        Component spawnEggText = Component.translatable("gui.examplemod.spawn_egg");
         guiGraphics.drawString(this.font, spawnEggText, 8, 25, 4210752, false);
 
-        Component instructionText = Component.literal("Place a spawn egg to specify mob type");
+        Component instructionText = Component.translatable("gui.examplemod.spawn_egg_instruction");
         guiGraphics.drawString(this.font, instructionText, 8, 55, 0x666666, false);
 
         // 显示当前偏移位置（移动到按钮上方）
-        Component offsetText = Component.literal("Offset: X=" + offsetX + " Y=" + offsetY + " Z=" + offsetZ);
+        Component offsetText = Component.translatable("gui.examplemod.offset", offsetX, offsetY, offsetZ);
         guiGraphics.drawString(this.font, offsetText, 8, 85, 4210752, false);
 
+        // 显示红石控制模式（移动到右上方按钮下方）
+        RedstoneMode currentMode = getCurrentRedstoneMode();
+        Component redstoneText = Component.translatable("gui.examplemod.redstone_mode", currentMode.getLocalizedName().getString());
+        guiGraphics.drawString(this.font, redstoneText, 120, 38, 4210752, false);
+
         // 显示模块槽位标签
-        Component moduleText = Component.literal("Modules:");
+        Component moduleText = Component.translatable("gui.examplemod.modules");
         guiGraphics.drawString(this.font, moduleText, 8, 50, 4210752, false);
 
         // 显示每个槽位的模块类型标签
@@ -189,7 +249,7 @@ public class SpawnEggMobSpawnerScreen extends AbstractContainerScreen<SpawnEggMo
 
     private void toggleSpawnArea(Button button) {
         showSpawnArea = !showSpawnArea;
-        button.setMessage(Component.literal(showSpawnArea ? "Hide Area" : "Show Area"));
+        button.setMessage(Component.translatable(showSpawnArea ? "gui.examplemod.hide_area" : "gui.examplemod.show_area"));
 
         if (showSpawnArea) {
             // 获取增强后的刷怪范围
@@ -297,6 +357,35 @@ public class SpawnEggMobSpawnerScreen extends AbstractContainerScreen<SpawnEggMo
                 }
             }
         }
+    }
+
+    /**
+     * 获取当前红石模式
+     */
+    private RedstoneMode getCurrentRedstoneMode() {
+        if (this.menu.getLevel() != null && this.menu.getLevel().isLoaded(this.menu.getBlockPos())) {
+            var blockEntity = this.menu.getLevel().getBlockEntity(this.menu.getBlockPos());
+            if (blockEntity instanceof com.example.examplemod.blockentity.MobSpawnerBlockEntity spawner) {
+                return spawner.getRedstoneMode();
+            }
+        }
+        return RedstoneMode.ALWAYS; // 默认模式
+    }
+
+    /**
+     * 切换红石控制模式
+     */
+    private void toggleRedstoneMode() {
+        RedstoneMode currentMode = getCurrentRedstoneMode();
+        RedstoneMode nextMode = currentMode.getNext();
+
+        // 发送网络包到服务器
+        PacketDistributor.sendToServer(new RedstoneModeUpdatePacket(this.menu.getBlockPos(), nextMode));
+
+        // 不做乐观更新，等待服务端确认
+        // 界面会通过 containerTick() -> updateRedstoneButton() 自动更新
+
+        System.out.println("SpawnEggMobSpawnerScreen: Requesting redstone mode change to " + nextMode.getDisplayName());
     }
 
     @Override
