@@ -52,6 +52,7 @@ public class SpawnAreaRenderer {
     public static void updateSpawnRange(BlockPos pos, int range) {
         if (isRendering && pos.equals(spawnerPos)) {
             spawnRange = range;
+            System.out.println("SpawnAreaRenderer: Updated spawn range to " + range);
         }
     }
 
@@ -66,6 +67,32 @@ public class SpawnAreaRenderer {
 
     public static boolean isRenderingAt(BlockPos pos) {
         return isRendering && pos.equals(spawnerPos);
+    }
+
+    /**
+     * 获取当前有效的刷怪范围（考虑模块增强）
+     */
+    private static int getEffectiveSpawnRange() {
+        if (!isRendering || spawnerPos == null) {
+            return spawnRange;
+        }
+
+        // 尝试从世界中获取刷怪器并计算增强后的范围
+        var minecraft = net.minecraft.client.Minecraft.getInstance();
+        if (minecraft.level != null && minecraft.level.isLoaded(spawnerPos)) {
+            var blockEntity = minecraft.level.getBlockEntity(spawnerPos);
+            if (blockEntity instanceof com.example.examplemod.blockentity.MobSpawnerBlockEntity spawner) {
+                var moduleManager = spawner.getModuleManager();
+                var baseStats = new com.example.examplemod.spawner.SpawnerModuleManager.SpawnerStats(
+                    spawner.getSpawnRange(), spawner.getMinSpawnDelay(), spawner.getMaxSpawnDelay(),
+                    spawner.getSpawnCount(), spawner.getMaxNearbyEntities(), spawner.getRequiredPlayerRange()
+                );
+                var enhancedStats = moduleManager.applyModules(baseStats);
+                return enhancedStats.spawnRange();
+            }
+        }
+
+        return spawnRange; // 回退到存储的范围
     }
     
     @SubscribeEvent
@@ -111,13 +138,18 @@ public class SpawnAreaRenderer {
     }
     
     private static void renderSpawnArea(PoseStack poseStack, MultiBufferSource bufferSource, BlockPos center, int range) {
-        // 创建刷怪区域的AABB，考虑偏移
+        // 获取实际有效的范围（考虑模块增强）
+        int effectiveRange = getEffectiveSpawnRange();
+
+        // 创建刷怪区域的AABB，考虑偏移和模块增强
         BlockPos actualCenter = center.offset(offsetX, offsetY, offsetZ);
         AABB spawnArea = new AABB(
-            actualCenter.getX() - range, actualCenter.getY() - range, actualCenter.getZ() - range,
-            actualCenter.getX() + range + 1, actualCenter.getY() + range + 1, actualCenter.getZ() + range + 1
+            actualCenter.getX() - effectiveRange, actualCenter.getY() - effectiveRange, actualCenter.getZ() - effectiveRange,
+            actualCenter.getX() + effectiveRange + 1, actualCenter.getY() + effectiveRange + 1, actualCenter.getZ() + effectiveRange + 1
         );
-        
+
+        System.out.println("SpawnAreaRenderer: Rendering with effective range " + effectiveRange + " (base: " + range + ")");
+
         // 使用更简单的渲染类型
         VertexConsumer lineConsumer = bufferSource.getBuffer(RenderType.LINES);
 

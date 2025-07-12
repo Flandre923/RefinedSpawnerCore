@@ -9,6 +9,13 @@
   "container.examplemod.mob_spawner": "Mob Spawner Configuration",
   "container.examplemod.spawn_egg_mob_spawner": "Mob Spawner",
 
+  "item.examplemod.range_reducer_module": "Range Reducer Module",
+  "item.examplemod.range_expander_module": "Range Expander Module",
+  "item.examplemod.min_delay_reducer_module": "Min Delay Reducer Module",
+  "item.examplemod.max_delay_reducer_module": "Max Delay Reducer Module",
+  "item.examplemod.count_booster_module": "Count Booster Module",
+  "item.examplemod.player_ignorer_module": "Player Ignorer Module",
+
   "examplemod.configuration.title": "Example Mod Configs",
   "examplemod.configuration.section.examplemod.common.toml": "Example Mod Configs",
   "examplemod.configuration.section.examplemod.common.toml.title": "Example Mod Configs",

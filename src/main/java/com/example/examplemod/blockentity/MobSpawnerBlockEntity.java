@@ -34,6 +34,8 @@ import net.minecraft.core.NonNullList;
 import net.minecraft.world.inventory.SimpleContainerData;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.ContainerHelper;
+import com.example.examplemod.spawner.SpawnerModuleManager;
+import com.example.examplemod.spawner.SpawnerModuleType;
 
 public class MobSpawnerBlockEntity extends BlockEntity implements MenuProvider, Container {
     private static final int SPAWN_RANGE = 4; // 9x9区域的半径
@@ -56,6 +58,9 @@ public class MobSpawnerBlockEntity extends BlockEntity implements MenuProvider, 
 
     // 物品槽位 - 用于存储刷怪蛋
     private NonNullList<ItemStack> items = NonNullList.withSize(1, ItemStack.EMPTY);
+
+    // 模块管理器 - 管理刷怪器增强模块
+    private SpawnerModuleManager moduleManager = new SpawnerModuleManager(6); // 6个模块槽位
 
     // ContainerData for GUI synchronization
     private final ContainerData dataAccess = new ContainerData() {
@@ -94,6 +99,12 @@ public class MobSpawnerBlockEntity extends BlockEntity implements MenuProvider, 
 
     public MobSpawnerBlockEntity(BlockPos pos, BlockState blockState) {
         super(ExampleMod.MOB_SPAWNER_BLOCK_ENTITY.get(), pos, blockState);
+
+        // 设置模块变更监听器
+        this.moduleManager.setChangeListener(() -> {
+            this.setChanged(); // 标记为已更改，确保数据保存
+            System.out.println("MobSpawnerBlockEntity: Module configuration changed");
+        });
     }
 
     public static void tick(Level level, BlockPos pos, BlockState state, MobSpawnerBlockEntity blockEntity) {
@@ -103,8 +114,10 @@ public class MobSpawnerBlockEntity extends BlockEntity implements MenuProvider, 
 
         ServerLevel serverLevel = (ServerLevel) level;
         
-        // 检查是否有玩家在附近
-        if (!serverLevel.hasNearbyAlivePlayer(pos.getX() + 0.5, pos.getY() + 0.5, pos.getZ() + 0.5, blockEntity.requiredPlayerRange)) {
+        // 检查是否有玩家在附近（考虑模块效果）
+        int effectivePlayerRange = blockEntity.moduleManager.shouldIgnorePlayer() ?
+            1000 : blockEntity.requiredPlayerRange;
+        if (!serverLevel.hasNearbyAlivePlayer(pos.getX() + 0.5, pos.getY() + 0.5, pos.getZ() + 0.5, effectivePlayerRange)) {
             return;
         }
 
@@ -114,29 +127,44 @@ public class MobSpawnerBlockEntity extends BlockEntity implements MenuProvider, 
             return;
         }
 
-        // 检查附近实体数量
-        AABB checkArea = new AABB(pos).inflate(blockEntity.spawnRange);
+        // 获取模块增强后的数值
+        SpawnerModuleManager.SpawnerStats baseStats = new SpawnerModuleManager.SpawnerStats(
+            blockEntity.spawnRange, blockEntity.minSpawnDelay, blockEntity.maxSpawnDelay,
+            blockEntity.spawnCount, blockEntity.maxNearbyEntities, blockEntity.requiredPlayerRange
+        );
+        SpawnerModuleManager.SpawnerStats enhancedStats = blockEntity.moduleManager.applyModules(baseStats);
+
+        // 调试信息：显示基础值和增强值的对比
+        if (blockEntity.spawnDelay <= 0) { // 只在即将生成时打印，避免刷屏
+            System.out.println("MobSpawnerBlockEntity: Base stats: " + baseStats);
+            System.out.println("MobSpawnerBlockEntity: Enhanced stats: " + enhancedStats);
+            System.out.println("MobSpawnerBlockEntity: Active modules: " + blockEntity.moduleManager.getInstalledModulesInfo());
+        }
+
+        // 检查附近实体数量（使用增强后的范围）
+        AABB checkArea = new AABB(pos).inflate(enhancedStats.spawnRange());
         List<Mob> nearbyMobs = serverLevel.getEntitiesOfClass(Mob.class, checkArea);
-        if (nearbyMobs.size() >= blockEntity.maxNearbyEntities) {
+        if (nearbyMobs.size() >= enhancedStats.maxNearbyEntities()) {
             return;
         }
 
-        // 尝试生成生物
+        // 尝试生成生物（使用增强后的数量）
         boolean spawned = false;
-        for (int i = 0; i < blockEntity.spawnCount; i++) {
-            if (blockEntity.spawnMob(serverLevel, pos)) {
+        for (int i = 0; i < enhancedStats.spawnCount(); i++) {
+            if (blockEntity.spawnMob(serverLevel, pos, enhancedStats.spawnRange())) {
                 spawned = true;
             }
         }
 
         if (spawned) {
-            // 重置生成延迟
-            blockEntity.spawnDelay = blockEntity.minSpawnDelay + 
-                serverLevel.random.nextInt(blockEntity.maxSpawnDelay - blockEntity.minSpawnDelay + 1);
+            // 重置生成延迟（使用增强后的延迟）
+            int minDelay = Math.max(1, enhancedStats.minSpawnDelay());
+            int maxDelay = Math.max(minDelay, enhancedStats.maxSpawnDelay());
+            blockEntity.spawnDelay = minDelay + serverLevel.random.nextInt(maxDelay - minDelay + 1);
         }
     }
 
-    private boolean spawnMob(ServerLevel level, BlockPos spawnerPos) {
+    private boolean spawnMob(ServerLevel level, BlockPos spawnerPos, int effectiveSpawnRange) {
         EntityType<?> entityType = null;
         RandomSource random = level.random;
 
@@ -170,9 +198,9 @@ public class MobSpawnerBlockEntity extends BlockEntity implements MenuProvider, 
         // 在指定区域内随机选择生成位置，考虑偏移
         BlockPos centerPos = spawnerPos.offset(offsetX, offsetY, offsetZ);
         for (int attempts = 0; attempts < 50; attempts++) {
-            int x = centerPos.getX() + random.nextInt(2 * spawnRange + 1) - spawnRange;
-            int z = centerPos.getZ() + random.nextInt(2 * spawnRange + 1) - spawnRange;
-            int y = centerPos.getY() + random.nextInt(2 * spawnRange + 1) - spawnRange;
+            int x = centerPos.getX() + random.nextInt(2 * effectiveSpawnRange + 1) - effectiveSpawnRange;
+            int z = centerPos.getZ() + random.nextInt(2 * effectiveSpawnRange + 1) - effectiveSpawnRange;
+            int y = centerPos.getY() + random.nextInt(2 * effectiveSpawnRange + 1) - effectiveSpawnRange;
 
             BlockPos spawnPos = new BlockPos(x, y, z);
 
@@ -228,6 +256,9 @@ public class MobSpawnerBlockEntity extends BlockEntity implements MenuProvider, 
 
         // 保存物品数据
         ContainerHelper.saveAllItems(output, this.items);
+
+        // 保存模块数据
+        ContainerHelper.saveAllItems(output, this.moduleManager.getModuleSlots(), true);
     }
 
     @Override
@@ -251,6 +282,10 @@ public class MobSpawnerBlockEntity extends BlockEntity implements MenuProvider, 
         // 加载物品数据
         this.items = NonNullList.withSize(this.getContainerSize(), ItemStack.EMPTY);
         ContainerHelper.loadAllItems(input, this.items);
+
+        // 加载模块数据
+        ContainerHelper.loadAllItems(input, this.moduleManager.getModuleSlots());
+        this.moduleManager.recalculateModules();
     }
 
     // MenuProvider implementation
@@ -341,6 +376,11 @@ public class MobSpawnerBlockEntity extends BlockEntity implements MenuProvider, 
         this.setChanged();
     }
 
+    // 模块管理器相关方法
+    public SpawnerModuleManager getModuleManager() {
+        return moduleManager;
+    }
+
 
     /**
      * 使用与NaturalSpawner相同的逻辑获取指定位置的可生成生物
@@ -394,7 +434,7 @@ public class MobSpawnerBlockEntity extends BlockEntity implements MenuProvider, 
     // Container接口实现
     @Override
     public int getContainerSize() {
-        return this.items.size();
+        return this.items.size(); // 只返回刷怪蛋槽位，模块槽位通过单独的接口访问
     }
 
     @Override

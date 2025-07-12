@@ -64,6 +64,8 @@ import com.example.examplemod.client.SpawnAreaRenderer;
 import com.example.examplemod.network.MobSpawnerUpdatePacket;
 import com.example.examplemod.network.SpawnAreaDataPacket;
 import com.example.examplemod.network.SpawnOffsetUpdatePacket;
+import com.example.examplemod.item.SpawnerModuleItem;
+import com.example.examplemod.spawner.SpawnerModuleType;
 
 // The value here should match an entry in the META-INF/neoforge.mods.toml file
 @Mod(ExampleMod.MODID)
@@ -137,6 +139,37 @@ public class ExampleMod {
     public static final DeferredHolder<MenuType<?>, MenuType<SpawnEggMobSpawnerMenu>> SPAWN_EGG_MOB_SPAWNER_MENU =
         MENU_TYPES.register("spawn_egg_mob_spawner", () -> IMenuTypeExtension.create(SpawnEggMobSpawnerMenu::new));
 
+    // Spawner Module Items
+    public static final DeferredItem<SpawnerModuleItem> RANGE_REDUCER_MODULE = ITEMS.register("range_reducer_module",
+        () -> new SpawnerModuleItem(new Item.Properties()
+            .setId(ResourceKey.create(Registries.ITEM, ResourceLocation.fromNamespaceAndPath(MODID, "range_reducer_module")))
+            .stacksTo(16), SpawnerModuleType.RANGE_REDUCER));
+
+    public static final DeferredItem<SpawnerModuleItem> RANGE_EXPANDER_MODULE = ITEMS.register("range_expander_module",
+        () -> new SpawnerModuleItem(new Item.Properties()
+            .setId(ResourceKey.create(Registries.ITEM, ResourceLocation.fromNamespaceAndPath(MODID, "range_expander_module")))
+            .stacksTo(16), SpawnerModuleType.RANGE_EXPANDER));
+
+    public static final DeferredItem<SpawnerModuleItem> MIN_DELAY_REDUCER_MODULE = ITEMS.register("min_delay_reducer_module",
+        () -> new SpawnerModuleItem(new Item.Properties()
+            .setId(ResourceKey.create(Registries.ITEM, ResourceLocation.fromNamespaceAndPath(MODID, "min_delay_reducer_module")))
+            .stacksTo(16), SpawnerModuleType.MIN_DELAY_REDUCER));
+
+    public static final DeferredItem<SpawnerModuleItem> MAX_DELAY_REDUCER_MODULE = ITEMS.register("max_delay_reducer_module",
+        () -> new SpawnerModuleItem(new Item.Properties()
+            .setId(ResourceKey.create(Registries.ITEM, ResourceLocation.fromNamespaceAndPath(MODID, "max_delay_reducer_module")))
+            .stacksTo(16), SpawnerModuleType.MAX_DELAY_REDUCER));
+
+    public static final DeferredItem<SpawnerModuleItem> COUNT_BOOSTER_MODULE = ITEMS.register("count_booster_module",
+        () -> new SpawnerModuleItem(new Item.Properties()
+            .setId(ResourceKey.create(Registries.ITEM, ResourceLocation.fromNamespaceAndPath(MODID, "count_booster_module")))
+            .stacksTo(16), SpawnerModuleType.COUNT_BOOSTER));
+
+    public static final DeferredItem<SpawnerModuleItem> PLAYER_IGNORER_MODULE = ITEMS.register("player_ignorer_module",
+        () -> new SpawnerModuleItem(new Item.Properties()
+            .setId(ResourceKey.create(Registries.ITEM, ResourceLocation.fromNamespaceAndPath(MODID, "player_ignorer_module")))
+            .stacksTo(16), SpawnerModuleType.PLAYER_IGNORER));
+
     // Creates a creative tab with the id "examplemod:example_tab" for the example item, that is placed after the combat tab
     public static final DeferredHolder<CreativeModeTab, CreativeModeTab> EXAMPLE_TAB = CREATIVE_MODE_TABS.register("example_tab", () -> CreativeModeTab.builder()
             .title(Component.translatable("itemGroup.examplemod")) //The language key for the title of your CreativeModeTab
@@ -146,6 +179,14 @@ public class ExampleMod {
                 output.accept(EXAMPLE_ITEM.get()); // Add the example item to the tab. For your own tabs, this method is preferred over the event
                 output.accept(MAGIC_WATER_BUCKET.get()); // Add the magic water bucket to the tab
                 output.accept(MOB_SPAWNER_BLOCK_ITEM.get()); // Add the mob spawner block to the tab
+
+                // Add spawner modules
+                output.accept(RANGE_REDUCER_MODULE.get());
+                output.accept(RANGE_EXPANDER_MODULE.get());
+                output.accept(MIN_DELAY_REDUCER_MODULE.get());
+                output.accept(MAX_DELAY_REDUCER_MODULE.get());
+                output.accept(COUNT_BOOSTER_MODULE.get());
+                output.accept(PLAYER_IGNORER_MODULE.get());
             }).build());
 
     // The constructor for the mod class is the first code that is run when your mod is loaded.

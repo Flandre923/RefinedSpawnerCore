@@ -50,21 +50,41 @@ public class SpawnEggMobSpawnerMenu extends AbstractContainerMenu {
         // 添加刷怪蛋槽位
         this.addSlot(new SpawnEggSlot(container, 0, 80, 35));
 
+        // 添加模块槽位 (6个槽位，3x2布局)
+        addModuleSlots();
+
         // 添加玩家物品栏
         this.addPlayerInventory(playerInventory);
     }
 
+    private void addModuleSlots() {
+        // 获取模块管理器
+        if (this.level != null && this.level.isLoaded(this.blockPos)) {
+            var blockEntity = this.level.getBlockEntity(this.blockPos);
+            if (blockEntity instanceof com.example.examplemod.blockentity.MobSpawnerBlockEntity spawner) {
+                var moduleManager = spawner.getModuleManager();
+
+                // 添加6个模块槽位，3x2布局
+                for (int i = 0; i < 6; i++) {
+                    int x = 8 + (i % 3) * 18;  // 3列
+                    int y = 60 + (i / 3) * 18; // 2行
+                    this.addSlot(new ModuleSlot(moduleManager, i, x, y));
+                }
+            }
+        }
+    }
+
     private void addPlayerInventory(Inventory playerInventory) {
-        // 玩家背包
+        // 玩家背包 (向下移动以给模块槽位让出空间)
         for (int i = 0; i < 3; ++i) {
             for (int j = 0; j < 9; ++j) {
-                this.addSlot(new Slot(playerInventory, j + i * 9 + 9, 8 + j * 18, 84 + i * 18));
+                this.addSlot(new Slot(playerInventory, j + i * 9 + 9, 8 + j * 18, 120 + i * 18));
             }
         }
 
         // 玩家快捷栏
         for (int k = 0; k < 9; ++k) {
-            this.addSlot(new Slot(playerInventory, k, 8 + k * 18, 142));
+            this.addSlot(new Slot(playerInventory, k, 8 + k * 18, 178));
         }
     }
 
@@ -157,6 +177,10 @@ public class SpawnEggMobSpawnerMenu extends AbstractContainerMenu {
         return this.offsetZ;
     }
 
+    public Level getLevel() {
+        return this.level;
+    }
+
     // 自定义槽位类，只允许放置刷怪蛋
     private static class SpawnEggSlot extends Slot {
         public SpawnEggSlot(Container container, int index, int x, int y) {
@@ -171,6 +195,102 @@ public class SpawnEggMobSpawnerMenu extends AbstractContainerMenu {
         @Override
         public int getMaxStackSize() {
             return 1; // 只允许放置一个刷怪蛋
+        }
+    }
+
+    // 模块槽位类
+    private static class ModuleSlot extends Slot {
+        private final com.example.examplemod.spawner.SpawnerModuleManager moduleManager;
+        private final int moduleIndex;
+
+        public ModuleSlot(com.example.examplemod.spawner.SpawnerModuleManager moduleManager, int moduleIndex, int x, int y) {
+            super(new ModuleContainer(moduleManager), moduleIndex, x, y);
+            this.moduleManager = moduleManager;
+            this.moduleIndex = moduleIndex;
+        }
+
+        @Override
+        public boolean mayPlace(ItemStack stack) {
+            return com.example.examplemod.spawner.SpawnerModuleType.isValidModule(stack);
+        }
+
+        @Override
+        public int getMaxStackSize() {
+            return 16;
+        }
+    }
+
+    // 模块容器适配器
+    private static class ModuleContainer implements Container {
+        private final com.example.examplemod.spawner.SpawnerModuleManager moduleManager;
+
+        public ModuleContainer(com.example.examplemod.spawner.SpawnerModuleManager moduleManager) {
+            this.moduleManager = moduleManager;
+        }
+
+        @Override
+        public int getContainerSize() {
+            return moduleManager.getModuleSlots().size();
+        }
+
+        @Override
+        public boolean isEmpty() {
+            return moduleManager.getModuleSlots().stream().allMatch(ItemStack::isEmpty);
+        }
+
+        @Override
+        public ItemStack getItem(int index) {
+            return moduleManager.getModule(index);
+        }
+
+        @Override
+        public ItemStack removeItem(int index, int count) {
+            ItemStack stack = moduleManager.getModule(index);
+            if (!stack.isEmpty()) {
+                if (stack.getCount() <= count) {
+                    moduleManager.setModule(index, ItemStack.EMPTY);
+                    moduleManager.recalculateModules(); // 重新计算模块效果
+                    System.out.println("ModuleContainer: Removed module at index " + index);
+                    return stack;
+                } else {
+                    ItemStack result = stack.split(count);
+                    moduleManager.recalculateModules(); // 重新计算模块效果
+                    return result;
+                }
+            }
+            return ItemStack.EMPTY;
+        }
+
+        @Override
+        public ItemStack removeItemNoUpdate(int index) {
+            ItemStack stack = moduleManager.getModule(index);
+            moduleManager.setModule(index, ItemStack.EMPTY);
+            moduleManager.recalculateModules(); // 重新计算模块效果
+            return stack;
+        }
+
+        @Override
+        public void setItem(int index, ItemStack stack) {
+            moduleManager.setModule(index, stack);
+            moduleManager.recalculateModules(); // 重新计算模块效果
+            System.out.println("ModuleContainer: Set module at index " + index + " to " + stack);
+        }
+
+        @Override
+        public void setChanged() {
+            moduleManager.recalculateModules(); // 确保模块效果更新
+        }
+
+        @Override
+        public boolean stillValid(Player player) {
+            return true;
+        }
+
+        @Override
+        public void clearContent() {
+            for (int i = 0; i < getContainerSize(); i++) {
+                moduleManager.setModule(i, ItemStack.EMPTY);
+            }
         }
     }
 }

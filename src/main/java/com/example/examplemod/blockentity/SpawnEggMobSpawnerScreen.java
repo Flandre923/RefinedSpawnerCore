@@ -29,7 +29,7 @@ public class SpawnEggMobSpawnerScreen extends AbstractContainerScreen<SpawnEggMo
     public SpawnEggMobSpawnerScreen(SpawnEggMobSpawnerMenu menu, Inventory playerInventory, Component title) {
         super(menu, playerInventory, title);
         this.imageWidth = 176;
-        this.imageHeight = 166;
+        this.imageHeight = 202; // 增加高度来容纳模块槽位
     }
 
     @Override
@@ -92,13 +92,29 @@ public class SpawnEggMobSpawnerScreen extends AbstractContainerScreen<SpawnEggMo
 
         // 检查刷怪范围是否改变，如果改变则更新渲染和显示
         int menuRange = this.menu.getSpawnRange();
-        if (menuRange != lastKnownRange) {
-            currentRange = menuRange;
-            lastKnownRange = menuRange;
+
+        // 计算增强后的范围
+        int effectiveRange = menuRange;
+        if (this.menu.getLevel() != null && this.menu.getLevel().isLoaded(this.menu.getBlockPos())) {
+            var blockEntity = this.menu.getLevel().getBlockEntity(this.menu.getBlockPos());
+            if (blockEntity instanceof com.example.examplemod.blockentity.MobSpawnerBlockEntity spawner) {
+                var moduleManager = spawner.getModuleManager();
+                var baseStats = new com.example.examplemod.spawner.SpawnerModuleManager.SpawnerStats(
+                    spawner.getSpawnRange(), spawner.getMinSpawnDelay(), spawner.getMaxSpawnDelay(),
+                    spawner.getSpawnCount(), spawner.getMaxNearbyEntities(), spawner.getRequiredPlayerRange()
+                );
+                var enhancedStats = moduleManager.applyModules(baseStats);
+                effectiveRange = enhancedStats.spawnRange();
+            }
+        }
+
+        if (effectiveRange != lastKnownRange) {
+            currentRange = effectiveRange;
+            lastKnownRange = effectiveRange;
 
             if (SpawnAreaRenderer.isRenderingAt(this.menu.getBlockPos())) {
-                SpawnAreaRenderer.updateSpawnRange(this.menu.getBlockPos(), currentRange);
-                System.out.println("SpawnEggMobSpawnerScreen: Updated render range to " + currentRange);
+                SpawnAreaRenderer.updateSpawnRange(this.menu.getBlockPos(), effectiveRange);
+                System.out.println("SpawnEggMobSpawnerScreen: Updated render range to " + effectiveRange + " (base: " + menuRange + ")");
             }
         }
     }
@@ -124,6 +140,26 @@ public class SpawnEggMobSpawnerScreen extends AbstractContainerScreen<SpawnEggMo
         // 显示当前偏移位置
         Component offsetText = Component.literal("Offset: X=" + offsetX + " Y=" + offsetY + " Z=" + offsetZ);
         guiGraphics.drawString(this.font, offsetText, 8, 70, 4210752, false);
+
+        // 显示模块槽位标签
+        Component moduleText = Component.literal("Modules:");
+        guiGraphics.drawString(this.font, moduleText, 8, 50, 4210752, false);
+
+        // 显示当前模块效果（如果有的话）
+        if (this.menu.getLevel() != null && this.menu.getLevel().isLoaded(this.menu.getBlockPos())) {
+            var blockEntity = this.menu.getLevel().getBlockEntity(this.menu.getBlockPos());
+            if (blockEntity instanceof com.example.examplemod.blockentity.MobSpawnerBlockEntity spawner) {
+                var moduleManager = spawner.getModuleManager();
+                var moduleInfo = moduleManager.getInstalledModulesInfo();
+
+                int yOffset = 0;
+                for (String info : moduleInfo) {
+                    Component infoText = Component.literal("§7" + info);
+                    guiGraphics.drawString(this.font, infoText, 70, 50 + yOffset, 0x666666, false);
+                    yOffset += 10;
+                }
+            }
+        }
     }
 
     private void toggleSpawnArea(Button button) {
@@ -131,8 +167,26 @@ public class SpawnEggMobSpawnerScreen extends AbstractContainerScreen<SpawnEggMo
         button.setMessage(Component.literal(showSpawnArea ? "Hide Area" : "Show Area"));
 
         if (showSpawnArea) {
-            // 启动区域渲染，使用实际的刷怪范围和偏移
-            SpawnAreaRenderer.startRendering(this.menu.getBlockPos(), this.menu.getSpawnRange(),
+            // 获取增强后的刷怪范围
+            int effectiveRange = this.menu.getSpawnRange(); // 基础范围
+
+            // 如果能获取到BlockEntity，计算增强后的范围
+            if (this.menu.getLevel() != null && this.menu.getLevel().isLoaded(this.menu.getBlockPos())) {
+                var blockEntity = this.menu.getLevel().getBlockEntity(this.menu.getBlockPos());
+                if (blockEntity instanceof com.example.examplemod.blockentity.MobSpawnerBlockEntity spawner) {
+                    var moduleManager = spawner.getModuleManager();
+                    var baseStats = new com.example.examplemod.spawner.SpawnerModuleManager.SpawnerStats(
+                        spawner.getSpawnRange(), spawner.getMinSpawnDelay(), spawner.getMaxSpawnDelay(),
+                        spawner.getSpawnCount(), spawner.getMaxNearbyEntities(), spawner.getRequiredPlayerRange()
+                    );
+                    var enhancedStats = moduleManager.applyModules(baseStats);
+                    effectiveRange = enhancedStats.spawnRange();
+                    System.out.println("SpawnEggMobSpawnerScreen: Using enhanced range " + effectiveRange + " (base: " + spawner.getSpawnRange() + ")");
+                }
+            }
+
+            // 启动区域渲染，使用增强后的刷怪范围和偏移
+            SpawnAreaRenderer.startRendering(this.menu.getBlockPos(), effectiveRange,
                                             offsetX, offsetY, offsetZ);
         } else {
             // 停止区域渲染
