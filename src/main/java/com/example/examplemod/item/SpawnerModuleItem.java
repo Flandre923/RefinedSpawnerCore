@@ -41,9 +41,12 @@ public class SpawnerModuleItem extends Item {
             case MIN_DELAY_REDUCER -> "Min Delay: " + effectValue + " ticks";
             case MAX_DELAY_REDUCER -> "Max Delay: " + effectValue + " ticks";
             case COUNT_BOOSTER -> "Spawn Count: +" + effectValue;
-            case PLAYER_IGNORER -> "Ignores player distance";
+            case PLAYER_IGNORER -> "Skips player distance check";
         };
 
         tooltipAdder.accept(Component.literal("§7" + effectText));
+
+        // 调试信息：确认数值来源
+        System.out.println("SpawnerModuleItem: " + moduleType.getDisplayName() + " tooltip shows value: " + effectValue);
     }
 }

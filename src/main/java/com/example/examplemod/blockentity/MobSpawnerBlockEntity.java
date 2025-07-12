@@ -115,11 +115,12 @@ public class MobSpawnerBlockEntity extends BlockEntity implements MenuProvider, 
         ServerLevel serverLevel = (ServerLevel) level;
         
         // 检查是否有玩家在附近（考虑模块效果）
-        int effectivePlayerRange = blockEntity.moduleManager.shouldIgnorePlayer() ?
-            1000 : blockEntity.requiredPlayerRange;
-        if (!serverLevel.hasNearbyAlivePlayer(pos.getX() + 0.5, pos.getY() + 0.5, pos.getZ() + 0.5, effectivePlayerRange)) {
-            return;
+        if (!blockEntity.moduleManager.shouldIgnorePlayer()) {
+            if (!serverLevel.hasNearbyAlivePlayer(pos.getX() + 0.5, pos.getY() + 0.5, pos.getZ() + 0.5, blockEntity.requiredPlayerRange)) {
+                return;
+            }
         }
+        // 如果有玩家忽略模块，直接跳过玩家检查
 
         // 减少生成延迟
         if (blockEntity.spawnDelay > 0) {

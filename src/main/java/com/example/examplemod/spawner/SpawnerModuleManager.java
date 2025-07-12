@@ -159,8 +159,8 @@ public class SpawnerModuleManager {
             baseStats.spawnCount() + getSpawnCountModifier()
         );
         
-        int newRequiredPlayerRange = shouldIgnorePlayer() ? 
-            SpawnerModuleConfig.PLAYER_IGNORER_RANGE : baseStats.requiredPlayerRange();
+        // 玩家忽略模块不改变requiredPlayerRange值，而是在生成逻辑中直接跳过检查
+        int newRequiredPlayerRange = baseStats.requiredPlayerRange();
         
         return new SpawnerStats(
             newSpawnRange,

@@ -9,29 +9,27 @@ import net.minecraft.world.item.ItemStack;
  */
 public enum SpawnerModuleType {
     // 范围相关模块
-    RANGE_REDUCER("range_reducer", "Range Reducer", "Reduces spawn range", -2),
-    RANGE_EXPANDER("range_expander", "Range Expander", "Increases spawn range", 3),
-    
+    RANGE_REDUCER("range_reducer", "Range Reducer", "Reduces spawn range"),
+    RANGE_EXPANDER("range_expander", "Range Expander", "Increases spawn range"),
+
     // 延迟相关模块
-    MIN_DELAY_REDUCER("min_delay_reducer", "Min Delay Reducer", "Reduces minimum spawn delay", -50),
-    MAX_DELAY_REDUCER("max_delay_reducer", "Max Delay Reducer", "Reduces maximum spawn delay", -100),
-    
+    MIN_DELAY_REDUCER("min_delay_reducer", "Min Delay Reducer", "Reduces minimum spawn delay"),
+    MAX_DELAY_REDUCER("max_delay_reducer", "Max Delay Reducer", "Reduces maximum spawn delay"),
+
     // 数量相关模块
-    COUNT_BOOSTER("count_booster", "Count Booster", "Increases spawn count", 2),
-    
+    COUNT_BOOSTER("count_booster", "Count Booster", "Increases spawn count"),
+
     // 特殊模块
-    PLAYER_IGNORER("player_ignorer", "Player Ignorer", "Ignores player range requirement", 0);
+    PLAYER_IGNORER("player_ignorer", "Player Ignorer", "Completely ignores player distance check");
 
     private final String id;
     private final String displayName;
     private final String description;
-    private final int effectValue;
 
-    SpawnerModuleType(String id, String displayName, String description, int effectValue) {
+    SpawnerModuleType(String id, String displayName, String description) {
         this.id = id;
         this.displayName = displayName;
         this.description = description;
-        this.effectValue = effectValue;
     }
 
     public String getId() {
@@ -47,7 +45,8 @@ public enum SpawnerModuleType {
     }
 
     public int getEffectValue() {
-        return effectValue;
+        // 动态获取配置文件中的最新数值
+        return com.example.examplemod.spawner.SpawnerModuleConfig.getModuleEffectValue(this);
     }
 
     public Component getDisplayComponent() {

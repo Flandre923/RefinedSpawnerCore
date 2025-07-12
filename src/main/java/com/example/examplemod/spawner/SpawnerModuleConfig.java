@@ -9,31 +9,31 @@ public class SpawnerModuleConfig {
     // ==================== 范围相关配置 ====================
     
     /** 范围缩减器：减少的刷怪范围 */
-    public static final int RANGE_REDUCER_VALUE = -2;
+    public static final int RANGE_REDUCER_VALUE = -1;
     
     /** 范围扩展器：增加的刷怪范围 */
-    public static final int RANGE_EXPANDER_VALUE = 3;
+    public static final int RANGE_EXPANDER_VALUE = 1;
     
     // ==================== 延迟相关配置 ====================
     
     /** 最小延迟缩减器：减少的最小刷怪延迟（tick） */
-    public static final int MIN_DELAY_REDUCER_VALUE = -50;
+    public static final int MIN_DELAY_REDUCER_VALUE = -12;
     
     /** 最大延迟缩减器：减少的最大刷怪延迟（tick） */
-    public static final int MAX_DELAY_REDUCER_VALUE = -100;
+    public static final int MAX_DELAY_REDUCER_VALUE = -48;
     
     // ==================== 数量相关配置 ====================
     
     /** 数量增强器：增加的刷怪数量 */
-    public static final int COUNT_BOOSTER_VALUE = 2;
+    public static final int COUNT_BOOSTER_VALUE = 1;
     
     /** 最大附近实体增强器：增加的最大附近实体数量 */
     public static final int MAX_NEARBY_ENTITIES_BOOSTER_VALUE = 4;
     
     // ==================== 特殊效果配置 ====================
-    
-    /** 玩家忽略器：设置的玩家检测范围（设为很大的值来忽略玩家） */
-    public static final int PLAYER_IGNORER_RANGE = 1000;
+
+    /** 玩家忽略器：完全跳过玩家距离检查 */
+    public static final boolean PLAYER_IGNORER_ENABLED = true;
     
     // ==================== 限制配置 ====================
     
@@ -81,7 +81,7 @@ public class SpawnerModuleConfig {
             case MIN_DELAY_REDUCER -> MIN_DELAY_REDUCER_VALUE;
             case MAX_DELAY_REDUCER -> MAX_DELAY_REDUCER_VALUE;
             case COUNT_BOOSTER -> COUNT_BOOSTER_VALUE;
-            case PLAYER_IGNORER -> PLAYER_IGNORER_RANGE;
+            case PLAYER_IGNORER -> 0; // 玩家忽略器不需要数值效果
         };
     }
     

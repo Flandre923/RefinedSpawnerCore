@@ -29,7 +29,7 @@ public class SpawnEggMobSpawnerScreen extends AbstractContainerScreen<SpawnEggMo
     public SpawnEggMobSpawnerScreen(SpawnEggMobSpawnerMenu menu, Inventory playerInventory, Component title) {
         super(menu, playerInventory, title);
         this.imageWidth = 176;
-        this.imageHeight = 202; // 增加高度来容纳模块槽位
+        this.imageHeight = 212; // 进一步增加高度来容纳8个模块槽位和位置调整按钮
     }
 
     @Override
@@ -53,8 +53,8 @@ public class SpawnEggMobSpawnerScreen extends AbstractContainerScreen<SpawnEggMo
 
         this.addRenderableWidget(this.showAreaButton);
 
-        // 添加位置调整按钮
-        int buttonY = this.topPos + 80;
+        // 添加位置调整按钮（移动到模块槽位下方）
+        int buttonY = this.topPos + 95; // 向下移动到模块槽位下方
         int buttonSize = 20;
         int spacing = 25;
 
@@ -89,6 +89,9 @@ public class SpawnEggMobSpawnerScreen extends AbstractContainerScreen<SpawnEggMo
         this.renderBackground(guiGraphics, mouseX, mouseY, partialTick);
         super.render(guiGraphics, mouseX, mouseY, partialTick);
         this.renderTooltip(guiGraphics, mouseX, mouseY);
+
+        // 渲染槽位工具提示（方法已简化，避免API兼容性问题）
+        renderSlotTooltips(guiGraphics, mouseX, mouseY);
 
         // 检查刷怪范围是否改变，如果改变则更新渲染和显示
         int menuRange = this.menu.getSpawnRange();
@@ -137,13 +140,25 @@ public class SpawnEggMobSpawnerScreen extends AbstractContainerScreen<SpawnEggMo
         Component instructionText = Component.literal("Place a spawn egg to specify mob type");
         guiGraphics.drawString(this.font, instructionText, 8, 55, 0x666666, false);
 
-        // 显示当前偏移位置
+        // 显示当前偏移位置（移动到按钮上方）
         Component offsetText = Component.literal("Offset: X=" + offsetX + " Y=" + offsetY + " Z=" + offsetZ);
-        guiGraphics.drawString(this.font, offsetText, 8, 70, 4210752, false);
+        guiGraphics.drawString(this.font, offsetText, 8, 85, 4210752, false);
 
         // 显示模块槽位标签
         Component moduleText = Component.literal("Modules:");
         guiGraphics.drawString(this.font, moduleText, 8, 50, 4210752, false);
+
+        // 显示每个槽位的模块类型标签
+        String[] slotLabels = {
+            "R-", "R+", "MD",  // 第一行：范围缩减、范围扩展、最小延迟
+            "XD", "C+", "PI"   // 第二行：最大延迟、数量增强、玩家忽略
+        };
+
+        for (int i = 0; i < 6; i++) {
+            int x = 8 + (i % 3) * 18 + 1;  // 槽位位置 + 1像素偏移（3列布局）
+            int y = 55 + (i / 3) * 18 - 8; // 槽位上方8像素，对应新的槽位位置
+            guiGraphics.drawString(this.font, slotLabels[i], x, y, 0x666666, false);
+        }
 
         // 显示当前模块效果（如果有的话）
         if (this.menu.getLevel() != null && this.menu.getLevel().isLoaded(this.menu.getBlockPos())) {
@@ -227,6 +242,11 @@ public class SpawnEggMobSpawnerScreen extends AbstractContainerScreen<SpawnEggMo
         }
 
         System.out.println("SpawnEggMobSpawnerScreen: Updated spawn offset to X=" + offsetX + " Y=" + offsetY + " Z=" + offsetZ);
+    }
+
+    private void renderSlotTooltips(GuiGraphics guiGraphics, int mouseX, int mouseY) {
+        // 工具提示功能暂时禁用，等待API兼容性修复
+        // 槽位标签已经提供了足够的信息指导用户
     }
 
     @Override
