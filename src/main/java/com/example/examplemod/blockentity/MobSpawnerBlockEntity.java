@@ -2,6 +2,7 @@ package com.example.examplemod.blockentity;
 
 import com.example.examplemod.ExampleMod;
 import com.example.examplemod.redstone.RedstoneMode;
+import com.example.examplemod.spawner.SpawnerModuleConfig;
 import net.minecraft.core.HolderLookup;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.core.BlockPos;
@@ -63,7 +64,7 @@ public class MobSpawnerBlockEntity extends BlockEntity implements MenuProvider, 
     private NonNullList<ItemStack> items = NonNullList.withSize(1, ItemStack.EMPTY);
 
     // 模块管理器 - 管理刷怪器增强模块
-    private SpawnerModuleManager moduleManager = new SpawnerModuleManager(6); // 6个模块槽位
+    private SpawnerModuleManager moduleManager = new SpawnerModuleManager(8); // 8个模块槽位
 
     // 红石控制模式
     private RedstoneMode redstoneMode = RedstoneMode.ALWAYS; // 默认始终工作
@@ -160,11 +161,21 @@ public class MobSpawnerBlockEntity extends BlockEntity implements MenuProvider, 
             return;
         }
 
-        // 尝试生成生物（使用增强后的数量）
+        // 检查是否启用模拟升级模式
         boolean spawned = false;
-        for (int i = 0; i < enhancedStats.spawnCount(); i++) {
-            if (blockEntity.spawnMob(serverLevel, pos, enhancedStats.spawnRange())) {
-                spawned = true;
+        if (blockEntity.moduleManager.hasSimulationUpgrade()) {
+            // 模拟升级模式：直接生成掉落物
+            for (int i = 0; i < enhancedStats.spawnCount(); i++) {
+                if (blockEntity.simulateSpawn(serverLevel, pos, enhancedStats.spawnRange())) {
+                    spawned = true;
+                }
+            }
+        } else {
+            // 正常模式：生成生物
+            for (int i = 0; i < enhancedStats.spawnCount(); i++) {
+                if (blockEntity.spawnMob(serverLevel, pos, enhancedStats.spawnRange())) {
+                    spawned = true;
+                }
             }
         }
 
@@ -248,6 +259,272 @@ public class MobSpawnerBlockEntity extends BlockEntity implements MenuProvider, 
         }
 
         return false;
+    }
+
+    /**
+     * 模拟生成：直接生成掉落物而不是生物
+     */
+    private boolean simulateSpawn(ServerLevel level, BlockPos spawnerPos, int effectiveSpawnRange) {
+        EntityType<?> entityType = null;
+        RandomSource random = level.random;
+
+        // 检查是否有刷怪蛋
+        ItemStack spawnEggStack = this.items.get(0);
+        if (!spawnEggStack.isEmpty() && spawnEggStack.getItem() instanceof SpawnEggItem spawnEggItem) {
+            // 使用刷怪蛋指定的生物类型
+            entityType = spawnEggItem.getType(level.registryAccess(), spawnEggStack);
+        } else {
+            // 使用原来的逻辑 - 根据生物群系生成
+            WeightedList<MobSpawnSettings.SpawnerData> possibleSpawns = getMobsAtPosition(
+                level,
+                spawnerPos,
+                MobCategory.MONSTER
+            );
+
+            if (possibleSpawns.isEmpty()) {
+                return false;
+            }
+
+            // 随机选择一个敌对生物类型
+            Optional<MobSpawnSettings.SpawnerData> optionalSpawnerData = possibleSpawns.getRandom(random);
+            if (optionalSpawnerData.isEmpty()) {
+                return false;
+            }
+
+            MobSpawnSettings.SpawnerData spawnerData = optionalSpawnerData.get();
+            entityType = spawnerData.type();
+        }
+
+        // 创建临时实体来获取掉落物
+        Entity tempEntity = entityType.create(level, EntitySpawnReason.SPAWNER);
+        if (tempEntity == null || !(tempEntity instanceof LivingEntity)) {
+            return false;
+        }
+
+        LivingEntity livingEntity = (LivingEntity) tempEntity;
+
+        // 在指定区域内随机选择掉落位置，考虑偏移
+        BlockPos centerPos = spawnerPos.offset(offsetX, offsetY, offsetZ);
+        BlockPos dropPos = centerPos.offset(
+            random.nextInt(2 * effectiveSpawnRange + 1) - effectiveSpawnRange,
+            random.nextInt(3) - 1, // Y轴偏移较小
+            random.nextInt(2 * effectiveSpawnRange + 1) - effectiveSpawnRange
+        );
+
+        // 获取掉落物
+        List<ItemStack> drops = getEntityDrops(livingEntity, level, dropPos);
+
+        // 尝试将掉落物插入到周围的容器中
+        boolean inserted = insertDropsIntoContainers(level, spawnerPos, drops);
+
+        if (inserted) {
+            // 播放生成效果（在刷怪器位置）
+            level.levelEvent(2004, spawnerPos, 0);
+            System.out.println("MobSpawnerBlockEntity: Simulated spawn of " + entityType.getDescriptionId() + " with " + drops.size() + " drops");
+            return true;
+        }
+
+        return false;
+    }
+
+    /**
+     * 获取实体的掉落物 - 使用原版战利品表系统
+     */
+    private List<ItemStack> getEntityDrops(LivingEntity entity, ServerLevel level, BlockPos pos) {
+        List<ItemStack> drops = new java.util.ArrayList<>();
+
+        // 设置实体位置用于掉落物计算
+        entity.setPos(pos.getX() + 0.5, pos.getY(), pos.getZ() + 0.5);
+
+        try {
+            // 使用原版的战利品表系统
+            java.util.Optional<net.minecraft.resources.ResourceKey<net.minecraft.world.level.storage.loot.LootTable>> lootTableKey = entity.getLootTable();
+
+            if (lootTableKey.isPresent()) {
+                // 获取战利品表
+                net.minecraft.world.level.storage.loot.LootTable lootTable = level.getServer().reloadableRegistries().getLootTable(lootTableKey.get());
+
+                // 创建战利品上下文
+                net.minecraft.world.level.storage.loot.LootParams.Builder builder = new net.minecraft.world.level.storage.loot.LootParams.Builder(level)
+                    .withParameter(net.minecraft.world.level.storage.loot.parameters.LootContextParams.THIS_ENTITY, entity)
+                    .withParameter(net.minecraft.world.level.storage.loot.parameters.LootContextParams.ORIGIN, entity.position())
+                    .withParameter(net.minecraft.world.level.storage.loot.parameters.LootContextParams.DAMAGE_SOURCE, level.damageSources().generic());
+
+                // 如果有玩家在附近，添加玩家参数以支持抢夺附魔等
+                net.minecraft.world.entity.player.Player nearestPlayer = level.getNearestPlayer(pos.getX(), pos.getY(), pos.getZ(), 16.0, false);
+                if (nearestPlayer != null) {
+                    builder.withParameter(net.minecraft.world.level.storage.loot.parameters.LootContextParams.ATTACKING_ENTITY, nearestPlayer);
+                    builder.withLuck(nearestPlayer.getLuck());
+                }
+
+                net.minecraft.world.level.storage.loot.LootParams lootParams = builder.create(net.minecraft.world.level.storage.loot.parameters.LootContextParamSets.ENTITY);
+
+                // 获取掉落物
+                drops.addAll(lootTable.getRandomItems(lootParams));
+
+                System.out.println("MobSpawnerBlockEntity: Generated " + drops.size() + " drops using loot table for " + entity.getType().getDescriptionId());
+            }
+        } catch (Exception e) {
+            // 如果战利品表方法失败，使用简化的后备方案
+            System.out.println("MobSpawnerBlockEntity: Failed to get loot table drops, using fallback: " + e.getMessage());
+        }
+
+        // 如果没有获取到掉落物，使用后备方案
+        if (drops.isEmpty()) {
+            drops.addAll(getFallbackDrops(entity, level));
+        }
+
+        return drops;
+    }
+
+    /**
+     * 后备掉落物方案
+     */
+    private List<ItemStack> getFallbackDrops(LivingEntity entity, ServerLevel level) {
+        List<ItemStack> drops = new java.util.ArrayList<>();
+
+        // 简化的掉落物生成逻辑作为后备
+        if (entity instanceof net.minecraft.world.entity.monster.Zombie) {
+            drops.add(new ItemStack(net.minecraft.world.item.Items.ROTTEN_FLESH, 1 + level.random.nextInt(3)));
+        } else if (entity instanceof net.minecraft.world.entity.monster.Skeleton) {
+            drops.add(new ItemStack(net.minecraft.world.item.Items.BONE, 1 + level.random.nextInt(3)));
+            drops.add(new ItemStack(net.minecraft.world.item.Items.ARROW, level.random.nextInt(3)));
+        } else if (entity instanceof net.minecraft.world.entity.monster.Creeper) {
+            drops.add(new ItemStack(net.minecraft.world.item.Items.GUNPOWDER, 1 + level.random.nextInt(3)));
+        } else if (entity instanceof net.minecraft.world.entity.monster.Spider) {
+            drops.add(new ItemStack(net.minecraft.world.item.Items.STRING, 1 + level.random.nextInt(3)));
+        } else {
+            // 默认掉落物
+            drops.add(new ItemStack(net.minecraft.world.item.Items.BONE, 1));
+        }
+
+        return drops;
+    }
+
+    /**
+     * 将掉落物插入到周围的容器中
+     */
+    private boolean insertDropsIntoContainers(ServerLevel level, BlockPos spawnerPos, List<ItemStack> drops) {
+        if (drops.isEmpty()) {
+            return false;
+        }
+
+        // 搜索周围的容器
+        List<net.minecraft.world.Container> containers = findNearbyContainers(level, spawnerPos);
+
+        if (containers.isEmpty()) {
+            System.out.println("MobSpawnerBlockEntity: No containers found nearby");
+            return false;
+        }
+
+        // 尝试插入所有掉落物
+        List<ItemStack> remainingDrops = new java.util.ArrayList<>(drops);
+
+        for (net.minecraft.world.Container container : containers) {
+            if (remainingDrops.isEmpty()) {
+                break;
+            }
+
+            // 尝试插入到当前容器
+            remainingDrops = insertItemsIntoContainer(container, remainingDrops);
+        }
+
+        // 如果还有剩余物品，掉落到地面
+        if (!remainingDrops.isEmpty()) {
+            BlockPos dropPos = spawnerPos.above();
+            for (ItemStack stack : remainingDrops) {
+                net.minecraft.world.entity.item.ItemEntity itemEntity = new net.minecraft.world.entity.item.ItemEntity(
+                    level, dropPos.getX() + 0.5, dropPos.getY(), dropPos.getZ() + 0.5, stack
+                );
+                level.addFreshEntity(itemEntity);
+            }
+            System.out.println("MobSpawnerBlockEntity: Dropped " + remainingDrops.size() + " items to ground");
+        }
+
+        return true; // 总是返回true，因为我们至少尝试了插入
+    }
+
+    /**
+     * 查找附近的容器
+     */
+    private List<net.minecraft.world.Container> findNearbyContainers(ServerLevel level, BlockPos spawnerPos) {
+        List<net.minecraft.world.Container> containers = new java.util.ArrayList<>();
+        int searchRange = SpawnerModuleConfig.SIMULATION_CONTAINER_SEARCH_RANGE;
+
+        // 搜索周围的方块实体
+        for (int x = -searchRange; x <= searchRange; x++) {
+            for (int y = -searchRange; y <= searchRange; y++) {
+                for (int z = -searchRange; z <= searchRange; z++) {
+                    BlockPos checkPos = spawnerPos.offset(x, y, z);
+                    net.minecraft.world.level.block.entity.BlockEntity blockEntity = level.getBlockEntity(checkPos);
+
+                    // 检查是否是容器
+                    if (blockEntity instanceof net.minecraft.world.Container container) {
+                        // 排除自己
+                        if (blockEntity != this) {
+                            containers.add(container);
+                        }
+                    }
+                }
+            }
+        }
+
+        System.out.println("MobSpawnerBlockEntity: Found " + containers.size() + " containers nearby");
+        return containers;
+    }
+
+    /**
+     * 将物品插入到容器中
+     */
+    private List<ItemStack> insertItemsIntoContainer(net.minecraft.world.Container container, List<ItemStack> items) {
+        List<ItemStack> remainingItems = new java.util.ArrayList<>();
+
+        for (ItemStack stack : items) {
+            ItemStack remaining = insertItemIntoContainer(container, stack.copy());
+            if (!remaining.isEmpty()) {
+                remainingItems.add(remaining);
+            }
+        }
+
+        return remainingItems;
+    }
+
+    /**
+     * 将单个物品插入到容器中
+     */
+    private ItemStack insertItemIntoContainer(net.minecraft.world.Container container, ItemStack stack) {
+        int containerSize = container.getContainerSize();
+
+        // 首先尝试合并到现有堆叠
+        for (int i = 0; i < containerSize; i++) {
+            ItemStack slotStack = container.getItem(i);
+            if (!slotStack.isEmpty() && ItemStack.isSameItemSameComponents(slotStack, stack)) {
+                int maxStackSize = Math.min(stack.getMaxStackSize(), container.getMaxStackSize());
+                int canAdd = maxStackSize - slotStack.getCount();
+                if (canAdd > 0) {
+                    int toAdd = Math.min(canAdd, stack.getCount());
+                    slotStack.grow(toAdd);
+                    stack.shrink(toAdd);
+                    container.setChanged();
+
+                    if (stack.isEmpty()) {
+                        return ItemStack.EMPTY;
+                    }
+                }
+            }
+        }
+
+        // 然后尝试放入空槽位
+        for (int i = 0; i < containerSize; i++) {
+            if (container.getItem(i).isEmpty()) {
+                container.setItem(i, stack.copy());
+                container.setChanged();
+                return ItemStack.EMPTY;
+            }
+        }
+
+        // 容器已满，返回剩余物品
+        return stack;
     }
 
     @Override

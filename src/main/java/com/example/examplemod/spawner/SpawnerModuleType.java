@@ -20,7 +20,8 @@ public enum SpawnerModuleType {
     COUNT_BOOSTER("count_booster", "Count Booster", "Increases spawn count"),
 
     // 特殊模块
-    PLAYER_IGNORER("player_ignorer", "Player Ignorer", "Completely ignores player distance check");
+    PLAYER_IGNORER("player_ignorer", "Player Ignorer", "Completely ignores player distance check"),
+    SIMULATION_UPGRADE("simulation_upgrade", "Simulation Upgrade", "Kills spawned mobs and inserts drops into nearby containers");
 
     private final String id;
     private final String displayName;

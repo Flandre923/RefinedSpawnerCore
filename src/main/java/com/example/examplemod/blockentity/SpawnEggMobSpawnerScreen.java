@@ -220,13 +220,13 @@ public class SpawnEggMobSpawnerScreen extends AbstractContainerScreen<SpawnEggMo
 
         // 显示每个槽位的模块类型标签
         String[] slotLabels = {
-            "R-", "R+", "MD",  // 第一行：范围缩减、范围扩展、最小延迟
-            "XD", "C+", "PI"   // 第二行：最大延迟、数量增强、玩家忽略
+            "R-", "R+", "MD", "XD",  // 第一行：范围缩减、范围扩展、最小延迟、最大延迟
+            "C+", "PI", "SU", "**"   // 第二行：数量增强、玩家忽略、模拟升级、通用
         };
 
-        for (int i = 0; i < 6; i++) {
-            int x = 8 + (i % 3) * 18 + 1;  // 槽位位置 + 1像素偏移（3列布局）
-            int y = 55 + (i / 3) * 18 - 8; // 槽位上方8像素，对应新的槽位位置
+        for (int i = 0; i < 8; i++) {
+            int x = 8 + (i % 4) * 18 + 1;  // 槽位位置 + 1像素偏移（4列布局）
+            int y = 55 + (i / 4) * 18 - 8; // 槽位上方8像素，对应新的槽位位置
             guiGraphics.drawString(this.font, slotLabels[i], x, y, 0x666666, false);
         }
 

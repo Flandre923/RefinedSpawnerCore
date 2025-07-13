@@ -172,6 +172,11 @@ public class ExampleMod {
             .setId(ResourceKey.create(Registries.ITEM, ResourceLocation.fromNamespaceAndPath(MODID, "player_ignorer_module")))
             .stacksTo(16), SpawnerModuleType.PLAYER_IGNORER));
 
+    public static final DeferredItem<SpawnerModuleItem> SIMULATION_UPGRADE_MODULE = ITEMS.register("simulation_upgrade_module",
+        () -> new SpawnerModuleItem(new Item.Properties()
+            .setId(ResourceKey.create(Registries.ITEM, ResourceLocation.fromNamespaceAndPath(MODID, "simulation_upgrade_module")))
+            .stacksTo(16), SpawnerModuleType.SIMULATION_UPGRADE));
+
     // Creates a creative tab with the id "examplemod:example_tab" for the example item, that is placed after the combat tab
     public static final DeferredHolder<CreativeModeTab, CreativeModeTab> EXAMPLE_TAB = CREATIVE_MODE_TABS.register("example_tab", () -> CreativeModeTab.builder()
             .title(Component.translatable("itemGroup.examplemod")) //The language key for the title of your CreativeModeTab
@@ -189,6 +194,7 @@ public class ExampleMod {
                 output.accept(MAX_DELAY_REDUCER_MODULE.get());
                 output.accept(COUNT_BOOSTER_MODULE.get());
                 output.accept(PLAYER_IGNORER_MODULE.get());
+                output.accept(SIMULATION_UPGRADE_MODULE.get());
             }).build());
 
     // The constructor for the mod class is the first code that is run when your mod is loaded.

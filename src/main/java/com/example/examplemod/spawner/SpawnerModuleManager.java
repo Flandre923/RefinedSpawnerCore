@@ -138,6 +138,13 @@ public class SpawnerModuleManager {
     public boolean shouldIgnorePlayer() {
         return hasModule(SpawnerModuleType.PLAYER_IGNORER);
     }
+
+    /**
+     * 检查是否启用模拟升级模式
+     */
+    public boolean hasSimulationUpgrade() {
+        return hasModule(SpawnerModuleType.SIMULATION_UPGRADE);
+    }
     
     /**
      * 应用所有模块效果到基础值

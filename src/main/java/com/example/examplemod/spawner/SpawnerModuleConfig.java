@@ -34,6 +34,12 @@ public class SpawnerModuleConfig {
 
     /** 玩家忽略器：完全跳过玩家距离检查 */
     public static final boolean PLAYER_IGNORER_ENABLED = true;
+
+    /** 模拟升级：启用模拟模式，直接生成掉落物而不是生物 */
+    public static final boolean SIMULATION_UPGRADE_ENABLED = true;
+
+    /** 模拟升级：容器搜索范围 */
+    public static final int SIMULATION_CONTAINER_SEARCH_RANGE = 5;
     
     // ==================== 限制配置 ====================
     
@@ -82,6 +88,7 @@ public class SpawnerModuleConfig {
             case MAX_DELAY_REDUCER -> MAX_DELAY_REDUCER_VALUE;
             case COUNT_BOOSTER -> COUNT_BOOSTER_VALUE;
             case PLAYER_IGNORER -> 0; // 玩家忽略器不需要数值效果
+            case SIMULATION_UPGRADE -> 0; // 模拟升级不需要数值效果
         };
     }
     

@@ -42,6 +42,7 @@ public class SpawnerModuleItem extends Item {
             case MAX_DELAY_REDUCER -> "Max Delay: " + effectValue + " ticks";
             case COUNT_BOOSTER -> "Spawn Count: +" + effectValue;
             case PLAYER_IGNORER -> "Skips player distance check";
+            case SIMULATION_UPGRADE -> "Kills mobs and inserts drops into containers";
         };
 
         tooltipAdder.accept(Component.literal("§7" + effectText));

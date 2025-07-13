@@ -71,13 +71,15 @@ public class SpawnEggMobSpawnerMenu extends AbstractContainerMenu {
                     com.example.examplemod.spawner.SpawnerModuleType.MIN_DELAY_REDUCER, // 槽位2：最小延迟缩减器
                     com.example.examplemod.spawner.SpawnerModuleType.MAX_DELAY_REDUCER, // 槽位3：最大延迟缩减器
                     com.example.examplemod.spawner.SpawnerModuleType.COUNT_BOOSTER,    // 槽位4：数量增强器
-                    com.example.examplemod.spawner.SpawnerModuleType.PLAYER_IGNORER    // 槽位5：玩家忽略器
+                    com.example.examplemod.spawner.SpawnerModuleType.PLAYER_IGNORER,   // 槽位5：玩家忽略器
+                    com.example.examplemod.spawner.SpawnerModuleType.SIMULATION_UPGRADE, // 槽位6：模拟升级
+                    null  // 槽位7：通用槽位，允许任何模块类型
                 };
 
-                // 添加6个模块槽位，3x2布局，每个槽位限制特定模块类型
-                for (int i = 0; i < 6; i++) {
-                    int x = 8 + (i % 3) * 18;  // 3列
-                    int y = 55 + (i / 3) * 18; // 2行，向上移动5像素
+                // 添加8个模块槽位，4x2布局，每个槽位限制特定模块类型
+                for (int i = 0; i < 8; i++) {
+                    int x = 8 + (i % 4) * 18;  // 4列
+                    int y = 55 + (i / 4) * 18; // 2行
                     this.addSlot(new ModuleSlot(moduleManager, i, x, y, slotTypes[i]));
                 }
             }
