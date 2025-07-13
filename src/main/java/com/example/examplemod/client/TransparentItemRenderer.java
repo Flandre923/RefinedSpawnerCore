@@ -26,22 +26,17 @@ public class TransparentItemRenderer {
             return;
         }
 
-        // 使用GuiGraphics的内置方法来渲染半透明物品
-        // 这是一个简化的实现，避免直接使用可能不兼容的RenderSystem方法
-        var poseStack = guiGraphics.pose();
-        poseStack.pushMatrix();
+        // 使用简化的方法来模拟半透明效果
+        // 通过在物品上覆盖半透明层来实现视觉上的透明效果
 
-        try {
-            // 简单的半透明效果：通过多次渲染来模拟透明度
-            if (alpha < 1.0f) {
-                // 对于半透明效果，我们使用一个简化的方法
-                // 在实际项目中，可能需要更复杂的渲染管道
-                guiGraphics.renderItem(itemStack, x, y);
-            } else {
-                guiGraphics.renderItem(itemStack, x, y);
-            }
-        } finally {
-            poseStack.popMatrix();
+        // 渲染物品本身
+        guiGraphics.renderItem(itemStack, x, y);
+
+        // 根据透明度覆盖半透明层
+        if (alpha < 1.0f) {
+            int overlayAlpha = (int)((1.0f - alpha) * 180); // 计算覆盖层透明度
+            int overlayColor = (overlayAlpha << 24) | 0xC0C0C0; // 灰色半透明覆盖
+            guiGraphics.fill(x, y, x + 16, y + 16, overlayColor);
         }
     }
     
@@ -132,14 +127,63 @@ public class TransparentItemRenderer {
 
     /**
      * 渲染简单的半透明物品（兼容版本）
-     * 这个方法使用最基本的渲染，避免API兼容性问题
+     * 这个方法使用半透明效果渲染槽位提示
      */
     public static void renderSimpleTransparentItem(GuiGraphics guiGraphics, ItemStack itemStack, int x, int y) {
         if (itemStack.isEmpty()) {
             return;
         }
 
-        // 使用最简单的渲染方法
-        guiGraphics.renderItem(itemStack, x, y);
+        // 使用默认的半透明度渲染
+        renderTransparentItem(guiGraphics, itemStack, x, y, 0.4f);
+    }
+
+    /**
+     * 渲染带脉动效果的半透明槽位提示
+     * 这个方法提供更好的视觉反馈
+     */
+    public static void renderSlotHint(GuiGraphics guiGraphics, ItemStack itemStack, int x, int y) {
+        if (itemStack.isEmpty()) {
+            return;
+        }
+
+        // 获取当前时间用于脉动效果
+        long gameTime = System.currentTimeMillis();
+
+        // 计算脉动透明度 (0.3f 到 0.6f 之间脉动)
+        float pulseAlpha = 0.3f + 0.3f * (float)(Math.sin(gameTime * 0.003) * 0.5 + 0.5);
+
+        // 渲染脉动背景边框
+        int pulseIntensity = (int)(pulseAlpha * 128);
+        int borderColor = (pulseIntensity << 24) | 0xFFFFFF; // 脉动白色边框
+        guiGraphics.fill(x - 1, y - 1, x + 17, y, borderColor); // 上边框
+        guiGraphics.fill(x - 1, y + 16, x + 17, y + 17, borderColor); // 下边框
+        guiGraphics.fill(x - 1, y, x, y + 16, borderColor); // 左边框
+        guiGraphics.fill(x + 16, y, x + 17, y + 16, borderColor); // 右边框
+
+        // 渲染半透明物品
+        renderTransparentItem(guiGraphics, itemStack, x, y, pulseAlpha);
+    }
+
+    /**
+     * 渲染带边框的半透明槽位提示
+     * 提供更清晰的视觉指示
+     */
+    public static void renderSlotHintWithBorder(GuiGraphics guiGraphics, ItemStack itemStack, int x, int y, int borderColor) {
+        if (itemStack.isEmpty()) {
+            return;
+        }
+
+        // 渲染彩色边框
+        guiGraphics.fill(x - 1, y - 1, x + 17, y, borderColor); // 上边框
+        guiGraphics.fill(x - 1, y + 16, x + 17, y + 17, borderColor); // 下边框
+        guiGraphics.fill(x - 1, y, x, y + 16, borderColor); // 左边框
+        guiGraphics.fill(x + 16, y, x + 17, y + 16, borderColor); // 右边框
+
+        // 渲染半透明背景
+        guiGraphics.fill(x, y, x + 16, y + 16, 0x30000000); // 半透明黑色背景
+
+        // 渲染半透明物品
+        renderTransparentItem(guiGraphics, itemStack, x, y, 0.5f);
     }
 }

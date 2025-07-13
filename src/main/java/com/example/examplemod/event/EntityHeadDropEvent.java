@@ -109,8 +109,8 @@ public class EntityHeadDropEvent {
             System.out.println("EntityHeadDropEvent: Returning wither skeleton skull");
             return new ItemStack(Items.WITHER_SKELETON_SKULL);
         } else if (entity instanceof net.minecraft.world.entity.monster.EnderMan) {
-            System.out.println("EntityHeadDropEvent: Returning dragon head for enderman");
-            return new ItemStack(Items.DRAGON_HEAD); // 使用龙头作为末影人头颅的替代
+            System.out.println("EntityHeadDropEvent: Enderman has no corresponding head item in vanilla");
+            return ItemStack.EMPTY; // 末影人没有对应的头颅物品
         } else if (entity instanceof Player player) {
             System.out.println("EntityHeadDropEvent: Returning player head");
             // 玩家头颅

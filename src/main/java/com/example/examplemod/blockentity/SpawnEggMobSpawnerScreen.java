@@ -2,7 +2,7 @@ package com.example.examplemod.blockentity;
 
 import com.example.examplemod.ExampleMod;
 import com.example.examplemod.client.SpawnAreaRenderer;
-import com.example.examplemod.client.TransparentItemRenderer;
+import com.example.examplemod.client.SimpleTransparentItemRenderer;
 import com.example.examplemod.client.SlotHintManager;
 import com.example.examplemod.spawner.SpawnerModuleType;
 import com.example.examplemod.redstone.RedstoneMode;
@@ -57,16 +57,16 @@ public class SpawnEggMobSpawnerScreen extends AbstractContainerScreen<SpawnEggMo
         offsetY = this.menu.getOffsetY();
         offsetZ = this.menu.getOffsetZ();
 
-        // 添加显示/隐藏刷怪区域的按钮
+        // 添加显示/隐藏刷怪区域的按钮 - 右上角位置
         this.showAreaButton = Button.builder(
             Component.translatable(showSpawnArea ? "gui.examplemod.hide_area" : "gui.examplemod.show_area"),
             this::toggleSpawnArea
-        ).bounds(this.leftPos + 100, this.topPos + 55, 70, 20).build();
+        ).bounds(this.leftPos + 100, this.topPos + 20, 70, 20).build();
 
         this.addRenderableWidget(this.showAreaButton);
 
-        // 添加位置调整按钮（移动到模块槽位下方，避免重合）
-        int buttonY = this.topPos + 105; // 进一步向下移动避免与第三行模块槽位重合
+        // 添加位置调整按钮 - 模块槽位下方
+        int buttonY = this.topPos + 100;
         int buttonSize = 20;
         int spacing = 25;
 
@@ -95,10 +95,10 @@ public class SpawnEggMobSpawnerScreen extends AbstractContainerScreen<SpawnEggMo
         this.addRenderableWidget(this.zMinusButton);
         this.addRenderableWidget(this.zPlusButton);
 
-        // 添加红石控制按钮（移动到右上方）
+        // 添加红石控制按钮 - 左上角位置
         RedstoneMode currentMode = getCurrentRedstoneMode();
         this.redstoneButton = Button.builder(currentMode.getLocalizedName(), (btn) -> toggleRedstoneMode())
-            .bounds(this.leftPos + 120, this.topPos + 20, 50, 16).build();
+            .bounds(this.leftPos + 8, this.topPos + 20, 50, 16).build();
         this.addRenderableWidget(this.redstoneButton);
     }
 
@@ -221,12 +221,12 @@ public class SpawnEggMobSpawnerScreen extends AbstractContainerScreen<SpawnEggMo
         // 显示每个槽位的模块类型标签
         String[] slotLabels = {
             "R-", "R+", "MD", "XD",  // 第一行：范围缩减、范围扩展、最小延迟、最大延迟
-            "C+", "PI", "SU", "**",  // 第二行：数量增强、玩家忽略、模拟升级、通用
+            "C+", "PI", "SU",        // 第二行：数量增强、玩家忽略、模拟升级
             "LT", "BH"               // 第三行：抢夺升级、斩首升级（仅模拟升级时显示）
         };
 
         // 获取当前有效的槽位数量
-        int effectiveSlotCount = 8; // 默认8个槽位
+        int effectiveSlotCount = 7; // 默认7个槽位
         if (this.menu.getLevel() != null && this.menu.getLevel().isLoaded(this.menu.getBlockPos())) {
             var blockEntity = this.menu.getLevel().getBlockEntity(this.menu.getBlockPos());
             if (blockEntity instanceof com.example.examplemod.blockentity.MobSpawnerBlockEntity spawner) {
@@ -236,14 +236,14 @@ public class SpawnEggMobSpawnerScreen extends AbstractContainerScreen<SpawnEggMo
 
         for (int i = 0; i < effectiveSlotCount; i++) {
             int x, y;
-            if (i < 8) {
-                // 前8个槽位：4x2布局，对应新的槽位位置
+            if (i < 7) {
+                // 前7个槽位：4x2布局（第二行只有3个），对应槽位位置
                 x = 8 + (i % 4) * 18 + 1;  // 槽位位置 + 1像素偏移
-                y = 45 + (i / 4) * 18 - 8; // 槽位上方8像素，对应新的y位置
+                y = 60 + (i / 4) * 18 - 8; // 槽位上方8像素
             } else {
                 // 额外的2个槽位：右侧
-                x = 8 + 4 * 18 + 10 + ((i - 8) % 2) * 18 + 1; // 右侧位置
-                y = 45 + ((i - 8) / 2) * 18 - 8; // 对应槽位上方
+                x = 8 + 4 * 18 + 10 + ((i - 7) % 2) * 18 + 1; // 右侧位置
+                y = 60 + ((i - 7) / 2) * 18 - 8; // 对应槽位上方
             }
             guiGraphics.drawString(this.font, slotLabels[i], x, y, 0x666666, false);
         }
@@ -350,13 +350,12 @@ public class SpawnEggMobSpawnerScreen extends AbstractContainerScreen<SpawnEggMo
             SpawnerModuleType.COUNT_BOOSTER,    // 槽位4：数量增强器
             SpawnerModuleType.PLAYER_IGNORER,   // 槽位5：玩家忽略器
             SpawnerModuleType.SIMULATION_UPGRADE, // 槽位6：模拟升级
-            null,  // 槽位7：通用槽位，允许任何模块类型
-            SpawnerModuleType.LOOTING_UPGRADE,  // 槽位8：抢夺升级（仅模拟升级时可见）
-            SpawnerModuleType.BEHEADING_UPGRADE // 槽位9：斩首升级（仅模拟升级时可见）
+            SpawnerModuleType.LOOTING_UPGRADE,  // 槽位7：抢夺升级（仅模拟升级时可见）
+            SpawnerModuleType.BEHEADING_UPGRADE // 槽位8：斩首升级（仅模拟升级时可见）
         };
 
         // 获取当前有效的槽位数量
-        int effectiveSlotCount = 8; // 默认8个槽位
+        int effectiveSlotCount = 7; // 默认7个槽位
         if (this.menu.getLevel() != null && this.menu.getLevel().isLoaded(this.menu.getBlockPos())) {
             var blockEntity = this.menu.getLevel().getBlockEntity(this.menu.getBlockPos());
             if (blockEntity instanceof com.example.examplemod.blockentity.MobSpawnerBlockEntity spawner) {
@@ -368,14 +367,14 @@ public class SpawnEggMobSpawnerScreen extends AbstractContainerScreen<SpawnEggMo
         for (int i = 0; i < effectiveSlotCount; i++) {
             // 计算槽位的屏幕坐标（与菜单布局保持一致）
             int slotX, slotY;
-            if (i < 8) {
-                // 前8个槽位：4x2布局
+            if (i < 7) {
+                // 前7个槽位：4x2布局（第二行只有3个），避开刷怪蛋槽位
                 slotX = this.leftPos + 8 + (i % 4) * 18;
-                slotY = this.topPos + 45 + (i / 4) * 18;
+                slotY = this.topPos + 60 + (i / 4) * 18;
             } else {
                 // 额外的2个槽位：右侧
-                slotX = this.leftPos + 8 + 4 * 18 + 10 + ((i - 8) % 2) * 18;
-                slotY = this.topPos + 45 + ((i - 8) / 2) * 18;
+                slotX = this.leftPos + 8 + 4 * 18 + 10 + ((i - 7) % 2) * 18;
+                slotY = this.topPos + 60 + ((i - 7) / 2) * 18;
             }
 
             // 检查槽位是否为空
@@ -385,10 +384,24 @@ public class SpawnEggMobSpawnerScreen extends AbstractContainerScreen<SpawnEggMo
                     // 获取对应的提示物品
                     ItemStack hintItem = SlotHintManager.getHintItem(slotTypes[i]);
                     if (!hintItem.isEmpty()) {
-                        // 渲染简单的半透明提示（使用兼容的方法）
-                        TransparentItemRenderer.renderSimpleTransparentItem(
-                            guiGraphics, hintItem, slotX, slotY
-                        );
+                        // 根据槽位类型选择不同的渲染效果
+                        if (slotTypes[i] == SpawnerModuleType.SIMULATION_UPGRADE) {
+                            // 模拟升级槽位使用特殊的金色边框
+                            SimpleTransparentItemRenderer.renderSlotHintWithBorder(
+                                guiGraphics, hintItem, slotX, slotY, 0x80FFD700 // 半透明金色
+                            );
+                        } else if (slotTypes[i] == SpawnerModuleType.LOOTING_UPGRADE ||
+                                   slotTypes[i] == SpawnerModuleType.BEHEADING_UPGRADE) {
+                            // 升级模块使用紫色边框
+                            SimpleTransparentItemRenderer.renderSlotHintWithBorder(
+                                guiGraphics, hintItem, slotX, slotY, 0x80800080 // 半透明紫色
+                            );
+                        } else {
+                            // 普通模块使用脉动效果
+                            SimpleTransparentItemRenderer.renderSlotHint(
+                                guiGraphics, hintItem, slotX, slotY
+                            );
+                        }
                     }
                 }
             }

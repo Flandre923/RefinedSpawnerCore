@@ -39,9 +39,9 @@ public class SpawnerModuleManager {
      */
     public int getEffectiveSlotCount() {
         if (hasSimulationUpgrade()) {
-            return moduleSlots.size(); // 显示所有10个槽位
+            return moduleSlots.size(); // 显示所有9个槽位
         } else {
-            return 8; // 只显示基础的8个槽位
+            return 7; // 只显示基础的7个槽位
         }
     }
 

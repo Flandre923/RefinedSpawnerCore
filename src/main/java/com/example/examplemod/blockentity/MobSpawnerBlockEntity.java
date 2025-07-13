@@ -42,6 +42,7 @@ import net.minecraft.core.NonNullList;
 import net.minecraft.world.inventory.SimpleContainerData;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.ContainerHelper;
+import net.minecraft.world.ItemStackWithSlot;
 import com.example.examplemod.spawner.SpawnerModuleManager;
 import com.example.examplemod.spawner.SpawnerModuleType;
 import com.example.examplemod.util.SpawnerFakePlayer;
@@ -80,7 +81,7 @@ public class MobSpawnerBlockEntity extends BlockEntity implements MenuProvider, 
     private NonNullList<ItemStack> items = NonNullList.withSize(1, ItemStack.EMPTY);
 
     // 模块管理器 - 管理刷怪器增强模块
-    private SpawnerModuleManager moduleManager = new SpawnerModuleManager(10); // 10个模块槽位（8个基础+2个升级）
+    private SpawnerModuleManager moduleManager = new SpawnerModuleManager(9); // 9个模块槽位（7个基础+2个升级）
 
     // 红石控制模式
     private RedstoneMode redstoneMode = RedstoneMode.ALWAYS; // 默认始终工作
@@ -346,15 +347,14 @@ public class MobSpawnerBlockEntity extends BlockEntity implements MenuProvider, 
         int experience = ExperienceFluidHelper.getExperienceFromEntity(livingEntity);
         boolean experienceStored = ExperienceFluidHelper.storeExperienceFluid(level, spawnerPos, experience);
 
-        if (inserted) {
-            // 播放生成效果（在刷怪器位置）
-            level.levelEvent(2004, spawnerPos, 0);
-            System.out.println("MobSpawnerBlockEntity: Simulated spawn of " + entityType.getDescriptionId() +
-                " with " + drops.size() + " drops and " + experience + " experience using FakePlayer");
-            return true;
-        }
+        // 播放生成效果（在刷怪器位置）
+        level.levelEvent(2004, spawnerPos, 0);
+        System.out.println("MobSpawnerBlockEntity: Simulated spawn of " + entityType.getDescriptionId() +
+            " with " + drops.size() + " drops and " + experience + " experience using FakePlayer" +
+            (inserted ? " (inserted into containers)" : " (dropped to ground)"));
 
-        return false;
+        // 无论是否成功插入容器，都认为生成成功，这样可以正确重置延迟
+        return true;
     }
 
     /**
@@ -767,8 +767,8 @@ public class MobSpawnerBlockEntity extends BlockEntity implements MenuProvider, 
         // 保存物品数据
         ContainerHelper.saveAllItems(output, this.items);
 
-        // 保存模块数据
-        ContainerHelper.saveAllItems(output, this.moduleManager.getModuleSlots(), true);
+        // 保存模块数据 - 使用不同的key避免冲突
+        saveModuleItems(output, this.moduleManager.getModuleSlots());
     }
 
     @Override
@@ -797,8 +797,8 @@ public class MobSpawnerBlockEntity extends BlockEntity implements MenuProvider, 
         this.items = NonNullList.withSize(this.getContainerSize(), ItemStack.EMPTY);
         ContainerHelper.loadAllItems(input, this.items);
 
-        // 加载模块数据
-        ContainerHelper.loadAllItems(input, this.moduleManager.getModuleSlots());
+        // 加载模块数据 - 使用不同的key避免冲突
+        loadModuleItems(input, this.moduleManager.getModuleSlots());
         this.moduleManager.recalculateModules();
     }
 
@@ -1123,5 +1123,32 @@ public class MobSpawnerBlockEntity extends BlockEntity implements MenuProvider, 
             buf.writeInt(this.getOffsetY());
             buf.writeInt(this.getOffsetZ());
         });
+    }
+
+    /**
+     * 保存模块物品数据，使用自定义key避免与主物品数据冲突
+     */
+    private void saveModuleItems(ValueOutput output, NonNullList<ItemStack> moduleItems) {
+        var typedOutputList = output.list("ModuleItems", ItemStackWithSlot.CODEC);
+
+        for (int i = 0; i < moduleItems.size(); ++i) {
+            ItemStack itemStack = moduleItems.get(i);
+            if (!itemStack.isEmpty()) {
+                typedOutputList.add(new ItemStackWithSlot(i, itemStack));
+            }
+        }
+    }
+
+    /**
+     * 加载模块物品数据，使用自定义key避免与主物品数据冲突
+     */
+    private void loadModuleItems(ValueInput input, NonNullList<ItemStack> moduleItems) {
+        var moduleItemsList = input.listOrEmpty("ModuleItems", ItemStackWithSlot.CODEC);
+
+        for (var itemStackWithSlot : moduleItemsList) {
+            if (itemStackWithSlot.isValidInContainer(moduleItems.size())) {
+                moduleItems.set(itemStackWithSlot.slot(), itemStackWithSlot.stack());
+            }
+        }
     }
 }

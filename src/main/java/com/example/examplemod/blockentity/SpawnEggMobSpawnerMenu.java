@@ -23,21 +23,27 @@ public class SpawnEggMobSpawnerMenu extends AbstractContainerMenu {
 
     // 客户端构造函数
     public SpawnEggMobSpawnerMenu(int containerId, Inventory playerInventory, FriendlyByteBuf extraData) {
-        this(containerId, playerInventory, new SimpleContainer(1), extraData.readBlockPos(), extraData.readInt(),
-             extraData.readInt(), extraData.readInt(), extraData.readInt());
-    }
-
-    // 服务端构造函数
-    public SpawnEggMobSpawnerMenu(int containerId, Inventory playerInventory, MobSpawnerBlockEntity blockEntity) {
-        this(containerId, playerInventory, blockEntity, blockEntity.getBlockPos(), blockEntity.getSpawnRange(),
-             blockEntity.getOffsetX(), blockEntity.getOffsetY(), blockEntity.getOffsetZ());
-    }
-
-    // 通用构造函数
-    public SpawnEggMobSpawnerMenu(int containerId, Inventory playerInventory, Container container, BlockPos blockPos,
-                                 int spawnRange, int offsetX, int offsetY, int offsetZ) {
         super(ExampleMod.SPAWN_EGG_MOB_SPAWNER_MENU.get(), containerId);
-        checkContainerSize(container, 1);
+
+        BlockPos blockPos = extraData.readBlockPos();
+        int spawnRange = extraData.readInt();
+        int offsetX = extraData.readInt();
+        int offsetY = extraData.readInt();
+        int offsetZ = extraData.readInt();
+
+        // 尝试获取客户端的BlockEntity，如果不存在则使用SimpleContainer
+        Container container;
+        if (playerInventory.player.level().isLoaded(blockPos)) {
+            var blockEntity = playerInventory.player.level().getBlockEntity(blockPos);
+            if (blockEntity instanceof MobSpawnerBlockEntity spawnerEntity) {
+                container = spawnerEntity;
+            } else {
+                container = new SimpleContainer(1);
+            }
+        } else {
+            container = new SimpleContainer(1);
+        }
+
         this.container = container;
         this.level = playerInventory.player.level();
         this.blockPos = blockPos;
@@ -46,10 +52,36 @@ public class SpawnEggMobSpawnerMenu extends AbstractContainerMenu {
         this.offsetY = offsetY;
         this.offsetZ = offsetZ;
 
+        checkContainerSize(container, 1);
         container.startOpen(playerInventory.player);
 
-        // 添加刷怪蛋槽位
+        // 添加刷怪蛋槽位 - 居中位置
         this.addSlot(new SpawnEggSlot(container, 0, 80, 35));
+
+        // 添加模块槽位 (6个槽位，3x2布局)
+        addModuleSlots();
+
+        // 添加玩家物品栏
+        this.addPlayerInventory(playerInventory);
+    }
+
+    // 服务端构造函数
+    public SpawnEggMobSpawnerMenu(int containerId, Inventory playerInventory, MobSpawnerBlockEntity blockEntity) {
+        super(ExampleMod.SPAWN_EGG_MOB_SPAWNER_MENU.get(), containerId);
+        checkContainerSize(blockEntity, 1);
+
+        this.container = blockEntity;
+        this.level = playerInventory.player.level();
+        this.blockPos = blockEntity.getBlockPos();
+        this.spawnRange = blockEntity.getSpawnRange();
+        this.offsetX = blockEntity.getOffsetX();
+        this.offsetY = blockEntity.getOffsetY();
+        this.offsetZ = blockEntity.getOffsetZ();
+
+        blockEntity.startOpen(playerInventory.player);
+
+        // 添加刷怪蛋槽位 - 居中位置
+        this.addSlot(new SpawnEggSlot(blockEntity, 0, 80, 35));
 
         // 添加模块槽位 (6个槽位，3x2布局)
         addModuleSlots();
@@ -60,54 +92,59 @@ public class SpawnEggMobSpawnerMenu extends AbstractContainerMenu {
 
     private void addModuleSlots() {
         // 获取模块管理器
+        com.example.examplemod.spawner.SpawnerModuleManager moduleManager = null;
         if (this.level != null && this.level.isLoaded(this.blockPos)) {
             var blockEntity = this.level.getBlockEntity(this.blockPos);
             if (blockEntity instanceof com.example.examplemod.blockentity.MobSpawnerBlockEntity spawner) {
-                var moduleManager = spawner.getModuleManager();
-
-                // 定义每个槽位允许的模块类型（每种类型一个槽位）
-                com.example.examplemod.spawner.SpawnerModuleType[] slotTypes = {
-                    com.example.examplemod.spawner.SpawnerModuleType.RANGE_REDUCER,    // 槽位0：范围缩减器
-                    com.example.examplemod.spawner.SpawnerModuleType.RANGE_EXPANDER,   // 槽位1：范围扩展器
-                    com.example.examplemod.spawner.SpawnerModuleType.MIN_DELAY_REDUCER, // 槽位2：最小延迟缩减器
-                    com.example.examplemod.spawner.SpawnerModuleType.MAX_DELAY_REDUCER, // 槽位3：最大延迟缩减器
-                    com.example.examplemod.spawner.SpawnerModuleType.COUNT_BOOSTER,    // 槽位4：数量增强器
-                    com.example.examplemod.spawner.SpawnerModuleType.PLAYER_IGNORER,   // 槽位5：玩家忽略器
-                    com.example.examplemod.spawner.SpawnerModuleType.SIMULATION_UPGRADE, // 槽位6：模拟升级
-                    null,  // 槽位7：通用槽位，允许任何模块类型
-                    com.example.examplemod.spawner.SpawnerModuleType.LOOTING_UPGRADE,  // 槽位8：抢夺升级（仅模拟升级时可见）
-                    com.example.examplemod.spawner.SpawnerModuleType.BEHEADING_UPGRADE // 槽位9：斩首升级（仅模拟升级时可见）
-                };
-
-                // 添加所有10个模块槽位，重新布局避免与调整按钮重合
-                for (int i = 0; i < 10; i++) {
-                    int x, y;
-                    if (i < 8) {
-                        // 前8个槽位：4x2布局，向上移动
-                        x = 8 + (i % 4) * 18;
-                        y = 45 + (i / 4) * 18; // 向上移动10像素
-                    } else {
-                        // 额外的2个槽位：放在右侧
-                        x = 8 + 4 * 18 + 10 + ((i - 8) % 2) * 18; // 右侧，间隔10像素
-                        y = 45 + ((i - 8) / 2) * 18;
-                    }
-                    this.addSlot(new ModuleSlot(moduleManager, i, x, y, slotTypes[i]));
-                }
+                moduleManager = spawner.getModuleManager();
             }
+        }
+
+        // 如果无法获取模块管理器，创建一个临时的用于客户端
+        if (moduleManager == null) {
+            moduleManager = new com.example.examplemod.spawner.SpawnerModuleManager(9);
+        }
+
+        // 定义每个槽位允许的模块类型（每种类型一个槽位）
+        com.example.examplemod.spawner.SpawnerModuleType[] slotTypes = {
+            com.example.examplemod.spawner.SpawnerModuleType.RANGE_REDUCER,    // 槽位0：范围缩减器
+            com.example.examplemod.spawner.SpawnerModuleType.RANGE_EXPANDER,   // 槽位1：范围扩展器
+            com.example.examplemod.spawner.SpawnerModuleType.MIN_DELAY_REDUCER, // 槽位2：最小延迟缩减器
+            com.example.examplemod.spawner.SpawnerModuleType.MAX_DELAY_REDUCER, // 槽位3：最大延迟缩减器
+            com.example.examplemod.spawner.SpawnerModuleType.COUNT_BOOSTER,    // 槽位4：数量增强器
+            com.example.examplemod.spawner.SpawnerModuleType.PLAYER_IGNORER,   // 槽位5：玩家忽略器
+            com.example.examplemod.spawner.SpawnerModuleType.SIMULATION_UPGRADE, // 槽位6：模拟升级
+            com.example.examplemod.spawner.SpawnerModuleType.LOOTING_UPGRADE,  // 槽位7：抢夺升级（仅模拟升级时可见）
+            com.example.examplemod.spawner.SpawnerModuleType.BEHEADING_UPGRADE // 槽位8：斩首升级（仅模拟升级时可见）
+        };
+
+        // 添加所有9个模块槽位，简洁的4x2+2布局
+        for (int i = 0; i < 9; i++) {
+            int x, y;
+            if (i < 7) {
+                // 前7个槽位：4x2布局（第二行只有3个），避开刷怪蛋槽位
+                x = 8 + (i % 4) * 18;
+                y = 60 + (i / 4) * 18;  // 向下移动避开刷怪蛋
+            } else {
+                // 额外的2个槽位：右侧位置
+                x = 8 + 4 * 18 + 10 + ((i - 7) % 2) * 18;
+                y = 60 + ((i - 7) / 2) * 18;
+            }
+            this.addSlot(new ModuleSlot(moduleManager, i, x, y, slotTypes[i]));
         }
     }
 
     private void addPlayerInventory(Inventory playerInventory) {
-        // 玩家背包 (向下移动以给模块槽位和按钮让出空间)
+        // 玩家背包 - 标准位置
         for (int i = 0; i < 3; ++i) {
             for (int j = 0; j < 9; ++j) {
-                this.addSlot(new Slot(playerInventory, j + i * 9 + 9, 8 + j * 18, 130 + i * 18));
+                this.addSlot(new Slot(playerInventory, j + i * 9 + 9, 8 + j * 18, 120 + i * 18));
             }
         }
 
         // 玩家快捷栏
         for (int k = 0; k < 9; ++k) {
-            this.addSlot(new Slot(playerInventory, k, 8 + k * 18, 188));
+            this.addSlot(new Slot(playerInventory, k, 8 + k * 18, 178));
         }
     }
 
@@ -122,9 +159,9 @@ public class SpawnEggMobSpawnerMenu extends AbstractContainerMenu {
 
             // 计算槽位范围
             int spawnEggSlotEnd = 1; // 刷怪蛋槽位：0
-            int moduleSlotEnd = spawnEggSlotEnd + 10; // 模块槽位：1-10
-            int playerInventoryEnd = moduleSlotEnd + 27; // 玩家背包：11-37
-            int hotbarEnd = playerInventoryEnd + 9; // 快捷栏：38-46
+            int moduleSlotEnd = spawnEggSlotEnd + 9; // 模块槽位：1-9
+            int playerInventoryEnd = moduleSlotEnd + 27; // 玩家背包：10-36
+            int hotbarEnd = playerInventoryEnd + 9; // 快捷栏：37-45
 
             if (index == 0) {
                 // 从刷怪蛋槽位移动到玩家背包
