@@ -10,11 +10,14 @@ import net.minecraft.server.level.ServerLevel;
 import net.minecraft.util.RandomSource;
 import net.minecraft.util.random.Weighted;
 import net.minecraft.world.entity.*;
+import net.minecraft.world.entity.item.ItemEntity;
+import net.minecraft.world.entity.monster.EnderMan;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.biome.Biome;
 import net.minecraft.world.level.biome.MobSpawnSettings;
 import net.minecraft.world.level.StructureManager;
 import net.minecraft.util.random.WeightedList;
+import net.neoforged.neoforge.common.NeoForge;
 import net.neoforged.neoforge.event.EventHooks;
 import java.lang.reflect.Method;
 import net.minecraft.world.level.block.entity.BlockEntity;
@@ -29,6 +32,7 @@ import net.minecraft.world.inventory.AbstractContainerMenu;
 import net.minecraft.world.inventory.ContainerData;
 import net.minecraft.world.entity.player.Inventory;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
 import net.minecraft.world.Container;
@@ -40,6 +44,18 @@ import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.ContainerHelper;
 import com.example.examplemod.spawner.SpawnerModuleManager;
 import com.example.examplemod.spawner.SpawnerModuleType;
+import com.example.examplemod.util.SpawnerFakePlayer;
+import com.example.examplemod.util.ExperienceFluidHelper;
+import net.neoforged.neoforge.event.entity.living.LivingDropsEvent;
+import net.neoforged.neoforge.common.util.FakePlayer;
+import net.minecraft.world.damagesource.DamageSource;
+import net.minecraft.world.damagesource.DamageTypes;
+import net.minecraft.world.entity.item.ItemEntity;
+import net.neoforged.neoforge.capabilities.Capabilities;
+import net.neoforged.neoforge.items.IItemHandler;
+import net.neoforged.neoforge.items.ItemHandlerHelper;
+import net.minecraft.resources.ResourceKey;
+import java.util.ArrayList;
 
 public class MobSpawnerBlockEntity extends BlockEntity implements MenuProvider, Container {
     private static final int SPAWN_RANGE = 4; // 9x9区域的半径
@@ -64,7 +80,7 @@ public class MobSpawnerBlockEntity extends BlockEntity implements MenuProvider, 
     private NonNullList<ItemStack> items = NonNullList.withSize(1, ItemStack.EMPTY);
 
     // 模块管理器 - 管理刷怪器增强模块
-    private SpawnerModuleManager moduleManager = new SpawnerModuleManager(8); // 8个模块槽位
+    private SpawnerModuleManager moduleManager = new SpawnerModuleManager(10); // 10个模块槽位（8个基础+2个升级）
 
     // 红石控制模式
     private RedstoneMode redstoneMode = RedstoneMode.ALWAYS; // 默认始终工作
@@ -262,7 +278,7 @@ public class MobSpawnerBlockEntity extends BlockEntity implements MenuProvider, 
     }
 
     /**
-     * 模拟生成：直接生成掉落物而不是生物
+     * 模拟生成：使用FakePlayer击杀生物来触发原版掠夺机制
      */
     private boolean simulateSpawn(ServerLevel level, BlockPos spawnerPos, int effectiveSpawnRange) {
         EntityType<?> entityType = null;
@@ -295,7 +311,7 @@ public class MobSpawnerBlockEntity extends BlockEntity implements MenuProvider, 
             entityType = spawnerData.type();
         }
 
-        // 创建临时实体来获取掉落物
+        // 创建临时实体
         Entity tempEntity = entityType.create(level, EntitySpawnReason.SPAWNER);
         if (tempEntity == null || !(tempEntity instanceof LivingEntity)) {
             return false;
@@ -303,24 +319,38 @@ public class MobSpawnerBlockEntity extends BlockEntity implements MenuProvider, 
 
         LivingEntity livingEntity = (LivingEntity) tempEntity;
 
-        // 在指定区域内随机选择掉落位置，考虑偏移
+        // 在指定区域内随机选择位置
         BlockPos centerPos = spawnerPos.offset(offsetX, offsetY, offsetZ);
-        BlockPos dropPos = centerPos.offset(
+        BlockPos spawnPos = centerPos.offset(
             random.nextInt(2 * effectiveSpawnRange + 1) - effectiveSpawnRange,
             random.nextInt(3) - 1, // Y轴偏移较小
             random.nextInt(2 * effectiveSpawnRange + 1) - effectiveSpawnRange
         );
 
-        // 获取掉落物
-        List<ItemStack> drops = getEntityDrops(livingEntity, level, dropPos);
+        // 设置实体位置
+        livingEntity.setPos(spawnPos.getX() + 0.5, spawnPos.getY(), spawnPos.getZ() + 0.5);
+
+        // 创建FakePlayer并设置假武器
+        SpawnerFakePlayer fakePlayer = new SpawnerFakePlayer(level, spawnerPos);
+        int lootingLevel = this.moduleManager.getLootingLevel();
+        int beheadingLevel = this.moduleManager.getBeheadingLevel();
+        fakePlayer.setupFakeWeapon(lootingLevel, beheadingLevel);
+
+        // 使用FakePlayer击杀生物，触发原版掠夺机制
+        List<ItemStack> drops = killEntityWithFakePlayer(livingEntity, fakePlayer, level);
 
         // 尝试将掉落物插入到周围的容器中
         boolean inserted = insertDropsIntoContainers(level, spawnerPos, drops);
 
+        // 生成经验流体
+        int experience = ExperienceFluidHelper.getExperienceFromEntity(livingEntity);
+        boolean experienceStored = ExperienceFluidHelper.storeExperienceFluid(level, spawnerPos, experience);
+
         if (inserted) {
             // 播放生成效果（在刷怪器位置）
             level.levelEvent(2004, spawnerPos, 0);
-            System.out.println("MobSpawnerBlockEntity: Simulated spawn of " + entityType.getDescriptionId() + " with " + drops.size() + " drops");
+            System.out.println("MobSpawnerBlockEntity: Simulated spawn of " + entityType.getDescriptionId() +
+                " with " + drops.size() + " drops and " + experience + " experience using FakePlayer");
             return true;
         }
 
@@ -328,7 +358,101 @@ public class MobSpawnerBlockEntity extends BlockEntity implements MenuProvider, 
     }
 
     /**
-     * 获取实体的掉落物 - 使用原版战利品表系统
+     * 使用FakePlayer击杀生物，触发原版掠夺机制
+     */
+    private List<ItemStack> killEntityWithFakePlayer(LivingEntity entity, SpawnerFakePlayer fakePlayer, ServerLevel level) {
+        List<ItemStack> drops = new ArrayList<>();
+
+        try {
+            // 创建伤害源，指定FakePlayer为攻击者
+            DamageSource damageSource = level.damageSources().playerAttack(fakePlayer);
+
+            // 收集掉落物的临时列表
+            List<ItemEntity> dropEntities = new ArrayList<>();
+
+            // 设置实体血量为0来模拟死亡（这样斩首事件才会触发）
+            entity.setHealth(0.0F);
+
+            // 创建LivingDropsEvent来捕获掉落物
+            LivingDropsEvent dropsEvent = new LivingDropsEvent(entity, damageSource, dropEntities, true);
+
+            // 使用战利品表生成掉落物而不是真正杀死实体
+            generateDropsFromLootTable(entity, fakePlayer, level, dropEntities);
+
+            // 触发LivingDropsEvent（这会被斩首升级监听）
+            net.neoforged.neoforge.common.NeoForge.EVENT_BUS.post(dropsEvent);
+
+            // 收集所有掉落物
+            for (ItemEntity itemEntity : dropsEvent.getDrops()) {
+                drops.add(itemEntity.getItem().copy());
+            }
+
+            // 移除临时实体（不让它真正死亡掉落物品）
+            entity.discard();
+
+            System.out.println("MobSpawnerBlockEntity: FakePlayer killed " + entity.getType().getDescriptionId() +
+                " with looting " + fakePlayer.getLootingLevel() + ", generated " + drops.size() + " drops");
+
+        } catch (Exception e) {
+            System.err.println("MobSpawnerBlockEntity: Error killing entity with FakePlayer: " + e.getMessage());
+            e.printStackTrace();
+        }
+
+        return drops;
+    }
+
+    /**
+     * 使用战利品表生成掉落物
+     */
+    private void generateDropsFromLootTable(LivingEntity entity, SpawnerFakePlayer fakePlayer, ServerLevel level, List<ItemEntity> dropEntities) {
+        try {
+            // 获取实体的战利品表
+            Optional<ResourceKey<net.minecraft.world.level.storage.loot.LootTable>> lootTableKey = entity.getLootTable();
+            if (lootTableKey.isEmpty()) {
+                return;
+            }
+
+            net.minecraft.world.level.storage.loot.LootTable lootTable = level.getServer().reloadableRegistries()
+                .getLootTable(lootTableKey.get());
+
+            // 创建战利品上下文
+            net.minecraft.world.level.storage.loot.LootParams.Builder builder =
+                new net.minecraft.world.level.storage.loot.LootParams.Builder(level)
+                    .withParameter(net.minecraft.world.level.storage.loot.parameters.LootContextParams.THIS_ENTITY, entity)
+                    .withParameter(net.minecraft.world.level.storage.loot.parameters.LootContextParams.ORIGIN, entity.position())
+                    .withParameter(net.minecraft.world.level.storage.loot.parameters.LootContextParams.DAMAGE_SOURCE,
+                        level.damageSources().playerAttack(fakePlayer))
+                    .withOptionalParameter(net.minecraft.world.level.storage.loot.parameters.LootContextParams.ATTACKING_ENTITY, fakePlayer)
+                    .withOptionalParameter(net.minecraft.world.level.storage.loot.parameters.LootContextParams.DIRECT_ATTACKING_ENTITY, fakePlayer);
+
+            // 添加FakePlayer的武器作为工具参数（这样抢夺附魔会生效）
+            ItemStack weapon = fakePlayer.getMainHandItem();
+            if (!weapon.isEmpty()) {
+                builder.withParameter(net.minecraft.world.level.storage.loot.parameters.LootContextParams.TOOL, weapon);
+            }
+
+            net.minecraft.world.level.storage.loot.LootParams lootParams =
+                builder.create(net.minecraft.world.level.storage.loot.parameters.LootContextParamSets.ENTITY);
+
+            // 生成掉落物
+            List<ItemStack> lootDrops = lootTable.getRandomItems(lootParams);
+
+            // 将掉落物转换为ItemEntity添加到列表中
+            for (ItemStack stack : lootDrops) {
+                if (!stack.isEmpty()) {
+                    ItemEntity itemEntity = new ItemEntity(level, entity.getX(), entity.getY(), entity.getZ(), stack);
+                    dropEntities.add(itemEntity);
+                }
+            }
+
+        } catch (Exception e) {
+            System.err.println("MobSpawnerBlockEntity: Error generating drops from loot table: " + e.getMessage());
+            e.printStackTrace();
+        }
+    }
+
+    /**
+     * 获取实体的掉落物 - 使用原版战利品表系统（备用方法）
      */
     private List<ItemStack> getEntityDrops(LivingEntity entity, ServerLevel level, BlockPos pos) {
         List<ItemStack> drops = new java.util.ArrayList<>();
@@ -357,10 +481,41 @@ public class MobSpawnerBlockEntity extends BlockEntity implements MenuProvider, 
                     builder.withLuck(nearestPlayer.getLuck());
                 }
 
+                // 应用模拟升级的抢夺和斩首效果
+                int lootingLevel = this.moduleManager.getLootingLevel();
+                int beheadingLevel = this.moduleManager.getBeheadingLevel();
+
+                System.out.println("MobSpawnerBlockEntity: Looting level: " + lootingLevel + ", Beheading level: " + beheadingLevel);
+                System.out.println("MobSpawnerBlockEntity: Has simulation upgrade: " + this.moduleManager.hasSimulationUpgrade());
+                System.out.println("MobSpawnerBlockEntity: Module counts: " + this.moduleManager.getInstalledModulesInfo());
+
+                // 创建虚拟武器来应用抢夺效果
+                if (lootingLevel > 0) {
+                    net.minecraft.world.item.ItemStack virtualWeapon = new net.minecraft.world.item.ItemStack(net.minecraft.world.item.Items.IRON_SWORD);
+                    // 添加抢夺附魔
+                    virtualWeapon.enchant(level.registryAccess().lookupOrThrow(net.minecraft.core.registries.Registries.ENCHANTMENT)
+                        .getOrThrow(net.minecraft.world.item.enchantment.Enchantments.LOOTING), lootingLevel);
+                    builder.withParameter(net.minecraft.world.level.storage.loot.parameters.LootContextParams.TOOL, virtualWeapon);
+                    System.out.println("MobSpawnerBlockEntity: Applied looting " + lootingLevel + " to virtual weapon");
+                }
+
                 net.minecraft.world.level.storage.loot.LootParams lootParams = builder.create(net.minecraft.world.level.storage.loot.parameters.LootContextParamSets.ENTITY);
 
                 // 获取掉落物
                 drops.addAll(lootTable.getRandomItems(lootParams));
+
+                // 应用斩首效果：直接添加头颅掉落
+                if (beheadingLevel > 0) {
+                    // 计算头颅掉落概率：每级斩首增加10%概率
+                    int dropChance = level.random.nextInt(10);
+                    if (dropChance < beheadingLevel) {
+                        ItemStack headStack = getHeadFromEntity(entity);
+                        if (!headStack.isEmpty()) {
+                            drops.add(headStack);
+                            System.out.println("MobSpawnerBlockEntity: Added head drop for " + entity.getType().getDescriptionId() + " with beheading level " + beheadingLevel);
+                        }
+                    }
+                }
 
                 System.out.println("MobSpawnerBlockEntity: Generated " + drops.size() + " drops using loot table for " + entity.getType().getDescriptionId());
             }
@@ -372,6 +527,20 @@ public class MobSpawnerBlockEntity extends BlockEntity implements MenuProvider, 
         // 如果没有获取到掉落物，使用后备方案
         if (drops.isEmpty()) {
             drops.addAll(getFallbackDrops(entity, level));
+
+            // 在后备方案中也应用斩首效果
+            int beheadingLevel = this.moduleManager.getBeheadingLevel();
+            if (beheadingLevel > 0) {
+                // 计算头颅掉落概率：每级斩首增加10%概率
+                int dropChance = level.random.nextInt(10);
+                if (dropChance < beheadingLevel) {
+                    ItemStack headStack = getHeadFromEntity(entity);
+                    if (!headStack.isEmpty()) {
+                        drops.add(headStack);
+                        System.out.println("MobSpawnerBlockEntity: Added head drop (fallback) for " + entity.getType().getDescriptionId() + " with beheading level " + beheadingLevel);
+                    }
+                }
+            }
         }
 
         return drops;
@@ -383,57 +552,101 @@ public class MobSpawnerBlockEntity extends BlockEntity implements MenuProvider, 
     private List<ItemStack> getFallbackDrops(LivingEntity entity, ServerLevel level) {
         List<ItemStack> drops = new java.util.ArrayList<>();
 
-        // 简化的掉落物生成逻辑作为后备
+        // 获取升级等级
+        int lootingLevel = this.moduleManager.getLootingLevel();
+        int beheadingLevel = this.moduleManager.getBeheadingLevel();
+
+        // 简化的掉落物生成逻辑作为后备（斩首效果由EntityHeadDropEvent处理）
         if (entity instanceof net.minecraft.world.entity.monster.Zombie) {
-            drops.add(new ItemStack(net.minecraft.world.item.Items.ROTTEN_FLESH, 1 + level.random.nextInt(3)));
+            int baseAmount = 1 + level.random.nextInt(3);
+            int lootingBonus = lootingLevel > 0 ? level.random.nextInt(lootingLevel + 1) : 0;
+            drops.add(new ItemStack(net.minecraft.world.item.Items.ROTTEN_FLESH, baseAmount + lootingBonus));
         } else if (entity instanceof net.minecraft.world.entity.monster.Skeleton) {
-            drops.add(new ItemStack(net.minecraft.world.item.Items.BONE, 1 + level.random.nextInt(3)));
-            drops.add(new ItemStack(net.minecraft.world.item.Items.ARROW, level.random.nextInt(3)));
+            int baseAmount = 1 + level.random.nextInt(3);
+            int lootingBonus = lootingLevel > 0 ? level.random.nextInt(lootingLevel + 1) : 0;
+            drops.add(new ItemStack(net.minecraft.world.item.Items.BONE, baseAmount + lootingBonus));
+            drops.add(new ItemStack(net.minecraft.world.item.Items.ARROW, level.random.nextInt(3) + lootingBonus));
         } else if (entity instanceof net.minecraft.world.entity.monster.Creeper) {
-            drops.add(new ItemStack(net.minecraft.world.item.Items.GUNPOWDER, 1 + level.random.nextInt(3)));
+            int baseAmount = 1 + level.random.nextInt(3);
+            int lootingBonus = lootingLevel > 0 ? level.random.nextInt(lootingLevel + 1) : 0;
+            drops.add(new ItemStack(net.minecraft.world.item.Items.GUNPOWDER, baseAmount + lootingBonus));
         } else if (entity instanceof net.minecraft.world.entity.monster.Spider) {
-            drops.add(new ItemStack(net.minecraft.world.item.Items.STRING, 1 + level.random.nextInt(3)));
+            int baseAmount = 1 + level.random.nextInt(3);
+            int lootingBonus = lootingLevel > 0 ? level.random.nextInt(lootingLevel + 1) : 0;
+            drops.add(new ItemStack(net.minecraft.world.item.Items.STRING, baseAmount + lootingBonus));
         } else {
             // 默认掉落物
-            drops.add(new ItemStack(net.minecraft.world.item.Items.BONE, 1));
+            int baseAmount = 1;
+            int lootingBonus = lootingLevel > 0 ? level.random.nextInt(lootingLevel + 1) : 0;
+            drops.add(new ItemStack(net.minecraft.world.item.Items.BONE, baseAmount + lootingBonus));
         }
 
         return drops;
     }
 
     /**
-     * 将掉落物插入到周围的容器中
+     * 根据实体类型获取对应的头颅（仅原版头颅）
+     */
+    private ItemStack getHeadFromEntity(LivingEntity entity) {
+        // 只支持原版头颅
+        if (entity instanceof net.minecraft.world.entity.monster.Zombie && !(entity instanceof net.minecraft.world.entity.monster.ZombieVillager)) {
+            return new ItemStack(net.minecraft.world.item.Items.ZOMBIE_HEAD);
+        } else if (entity instanceof net.minecraft.world.entity.monster.Skeleton && !(entity instanceof net.minecraft.world.entity.monster.WitherSkeleton)) {
+            return new ItemStack(net.minecraft.world.item.Items.SKELETON_SKULL);
+        } else if (entity instanceof net.minecraft.world.entity.monster.Creeper) {
+            return new ItemStack(net.minecraft.world.item.Items.CREEPER_HEAD);
+        } else if (entity instanceof net.minecraft.world.entity.monster.WitherSkeleton) {
+            return new ItemStack(net.minecraft.world.item.Items.WITHER_SKELETON_SKULL);
+        } else if (entity instanceof net.minecraft.world.entity.boss.enderdragon.EnderDragon) {
+            return new ItemStack(net.minecraft.world.item.Items.DRAGON_HEAD);
+        } else if (entity instanceof net.minecraft.world.entity.player.Player player) {
+            // 玩家头颅
+            ItemStack playerHead = new ItemStack(net.minecraft.world.item.Items.PLAYER_HEAD);
+            // 设置玩家头颅的皮肤
+            playerHead.set(net.minecraft.core.component.DataComponents.PROFILE,
+                new net.minecraft.world.item.component.ResolvableProfile(player.getGameProfile()));
+            return playerHead;
+        }
+
+        // 其他实体不支持头颅掉落
+        return ItemStack.EMPTY;
+    }
+
+
+
+    /**
+     * 将掉落物插入到周围的容器中 - 使用NeoForge ItemHandler
      */
     private boolean insertDropsIntoContainers(ServerLevel level, BlockPos spawnerPos, List<ItemStack> drops) {
         if (drops.isEmpty()) {
             return false;
         }
 
-        // 搜索周围的容器
-        List<net.minecraft.world.Container> containers = findNearbyContainers(level, spawnerPos);
+        // 搜索周围的ItemHandler
+        List<IItemHandler> itemHandlers = findNearbyItemHandlers(level, spawnerPos);
 
-        if (containers.isEmpty()) {
-            System.out.println("MobSpawnerBlockEntity: No containers found nearby");
+        if (itemHandlers.isEmpty()) {
+            System.out.println("MobSpawnerBlockEntity: No item handlers found nearby");
             return false;
         }
 
         // 尝试插入所有掉落物
-        List<ItemStack> remainingDrops = new java.util.ArrayList<>(drops);
+        List<ItemStack> remainingDrops = new ArrayList<>(drops);
 
-        for (net.minecraft.world.Container container : containers) {
+        for (IItemHandler handler : itemHandlers) {
             if (remainingDrops.isEmpty()) {
                 break;
             }
 
-            // 尝试插入到当前容器
-            remainingDrops = insertItemsIntoContainer(container, remainingDrops);
+            // 尝试插入到当前ItemHandler
+            remainingDrops = insertItemsIntoItemHandler(handler, remainingDrops);
         }
 
         // 如果还有剩余物品，掉落到地面
         if (!remainingDrops.isEmpty()) {
             BlockPos dropPos = spawnerPos.above();
             for (ItemStack stack : remainingDrops) {
-                net.minecraft.world.entity.item.ItemEntity itemEntity = new net.minecraft.world.entity.item.ItemEntity(
+                ItemEntity itemEntity = new ItemEntity(
                     level, dropPos.getX() + 0.5, dropPos.getY(), dropPos.getZ() + 0.5, stack
                 );
                 level.addFreshEntity(itemEntity);
@@ -441,14 +654,16 @@ public class MobSpawnerBlockEntity extends BlockEntity implements MenuProvider, 
             System.out.println("MobSpawnerBlockEntity: Dropped " + remainingDrops.size() + " items to ground");
         }
 
-        return true; // 总是返回true，因为我们至少尝试了插入
+        boolean allInserted = remainingDrops.isEmpty();
+        System.out.println("MobSpawnerBlockEntity: Inserted " + (drops.size() - remainingDrops.size()) + "/" + drops.size() + " items into containers");
+        return allInserted;
     }
 
     /**
-     * 查找附近的容器
+     * 查找附近的ItemHandler
      */
-    private List<net.minecraft.world.Container> findNearbyContainers(ServerLevel level, BlockPos spawnerPos) {
-        List<net.minecraft.world.Container> containers = new java.util.ArrayList<>();
+    private List<IItemHandler> findNearbyItemHandlers(ServerLevel level, BlockPos spawnerPos) {
+        List<IItemHandler> itemHandlers = new ArrayList<>();
         int searchRange = SpawnerModuleConfig.SIMULATION_CONTAINER_SEARCH_RANGE;
 
         // 搜索周围的方块实体
@@ -458,29 +673,32 @@ public class MobSpawnerBlockEntity extends BlockEntity implements MenuProvider, 
                     BlockPos checkPos = spawnerPos.offset(x, y, z);
                     net.minecraft.world.level.block.entity.BlockEntity blockEntity = level.getBlockEntity(checkPos);
 
-                    // 检查是否是容器
-                    if (blockEntity instanceof net.minecraft.world.Container container) {
-                        // 排除自己
-                        if (blockEntity != this) {
-                            containers.add(container);
-                        }
+                    // 排除自己
+                    if (blockEntity == this) {
+                        continue;
+                    }
+
+                    // 检查是否有ItemHandler capability
+                    IItemHandler itemHandler = level.getCapability(Capabilities.ItemHandler.BLOCK, checkPos, null);
+                    if (itemHandler != null) {
+                        itemHandlers.add(itemHandler);
                     }
                 }
             }
         }
 
-        System.out.println("MobSpawnerBlockEntity: Found " + containers.size() + " containers nearby");
-        return containers;
+        System.out.println("MobSpawnerBlockEntity: Found " + itemHandlers.size() + " item handlers nearby");
+        return itemHandlers;
     }
 
     /**
-     * 将物品插入到容器中
+     * 将物品插入到ItemHandler中
      */
-    private List<ItemStack> insertItemsIntoContainer(net.minecraft.world.Container container, List<ItemStack> items) {
-        List<ItemStack> remainingItems = new java.util.ArrayList<>();
+    private List<ItemStack> insertItemsIntoItemHandler(IItemHandler handler, List<ItemStack> items) {
+        List<ItemStack> remainingItems = new ArrayList<>();
 
         for (ItemStack stack : items) {
-            ItemStack remaining = insertItemIntoContainer(container, stack.copy());
+            ItemStack remaining = ItemHandlerHelper.insertItemStacked(handler, stack.copy(), false);
             if (!remaining.isEmpty()) {
                 remainingItems.add(remaining);
             }

@@ -21,7 +21,11 @@ public enum SpawnerModuleType {
 
     // 特殊模块
     PLAYER_IGNORER("player_ignorer", "Player Ignorer", "Completely ignores player distance check"),
-    SIMULATION_UPGRADE("simulation_upgrade", "Simulation Upgrade", "Kills spawned mobs and inserts drops into nearby containers");
+    SIMULATION_UPGRADE("simulation_upgrade", "Simulation Upgrade", "Kills spawned mobs and inserts drops into nearby containers"),
+
+    // 模拟升级专用模块（仅在有模拟升级时可用）
+    LOOTING_UPGRADE("looting_upgrade", "Looting Upgrade", "Increases looting level by 1 (max 16)"),
+    BEHEADING_UPGRADE("beheading_upgrade", "Beheading Upgrade", "Increases beheading level by 1 (max 16)");
 
     private final String id;
     private final String displayName;

@@ -32,6 +32,25 @@ public class SpawnerModuleManager {
     public NonNullList<ItemStack> getModuleSlots() {
         return moduleSlots;
     }
+
+    /**
+     * 获取当前有效的槽位数量
+     * 如果有模拟升级，则显示所有槽位；否则只显示基础槽位
+     */
+    public int getEffectiveSlotCount() {
+        if (hasSimulationUpgrade()) {
+            return moduleSlots.size(); // 显示所有10个槽位
+        } else {
+            return 8; // 只显示基础的8个槽位
+        }
+    }
+
+    /**
+     * 检查槽位是否可用
+     */
+    public boolean isSlotAvailable(int slot) {
+        return slot >= 0 && slot < getEffectiveSlotCount();
+    }
     
     /**
      * 设置指定槽位的模块
@@ -144,6 +163,20 @@ public class SpawnerModuleManager {
      */
     public boolean hasSimulationUpgrade() {
         return hasModule(SpawnerModuleType.SIMULATION_UPGRADE);
+    }
+
+    /**
+     * 获取抢夺等级
+     */
+    public int getLootingLevel() {
+        return getModuleCount(SpawnerModuleType.LOOTING_UPGRADE);
+    }
+
+    /**
+     * 获取斩首等级
+     */
+    public int getBeheadingLevel() {
+        return getModuleCount(SpawnerModuleType.BEHEADING_UPGRADE);
     }
     
     /**

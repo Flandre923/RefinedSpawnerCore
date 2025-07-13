@@ -38,11 +38,13 @@ public class SpawnerModuleItem extends Item {
         String effectText = switch (moduleType) {
             case RANGE_REDUCER -> "Range: " + effectValue;
             case RANGE_EXPANDER -> "Range: +" + effectValue;
-            case MIN_DELAY_REDUCER -> "Min Delay: " + effectValue + " ticks";
-            case MAX_DELAY_REDUCER -> "Max Delay: " + effectValue + " ticks";
+            case MIN_DELAY_REDUCER -> "Min Delay: " + effectValue + " ticks (stackable to 16)";
+            case MAX_DELAY_REDUCER -> "Max Delay: " + effectValue + " ticks (stackable to 16)";
             case COUNT_BOOSTER -> "Spawn Count: +" + effectValue;
             case PLAYER_IGNORER -> "Skips player distance check";
             case SIMULATION_UPGRADE -> "Kills mobs and inserts drops into containers";
+            case LOOTING_UPGRADE -> "Looting +" + effectValue + " (stackable to 16)";
+            case BEHEADING_UPGRADE -> "Beheading +" + effectValue + " (stackable to 16)";
         };
 
         tooltipAdder.accept(Component.literal("§7" + effectText));

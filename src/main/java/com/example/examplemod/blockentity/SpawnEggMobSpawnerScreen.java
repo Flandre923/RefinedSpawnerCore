@@ -65,8 +65,8 @@ public class SpawnEggMobSpawnerScreen extends AbstractContainerScreen<SpawnEggMo
 
         this.addRenderableWidget(this.showAreaButton);
 
-        // 添加位置调整按钮（移动到模块槽位下方）
-        int buttonY = this.topPos + 95; // 向下移动到模块槽位下方
+        // 添加位置调整按钮（移动到模块槽位下方，避免重合）
+        int buttonY = this.topPos + 105; // 进一步向下移动避免与第三行模块槽位重合
         int buttonSize = 20;
         int spacing = 25;
 
@@ -216,17 +216,35 @@ public class SpawnEggMobSpawnerScreen extends AbstractContainerScreen<SpawnEggMo
 
         // 显示模块槽位标签
         Component moduleText = Component.translatable("gui.examplemod.modules");
-        guiGraphics.drawString(this.font, moduleText, 8, 50, 4210752, false);
+        guiGraphics.drawString(this.font, moduleText, 8, 30, 4210752, false);
 
         // 显示每个槽位的模块类型标签
         String[] slotLabels = {
             "R-", "R+", "MD", "XD",  // 第一行：范围缩减、范围扩展、最小延迟、最大延迟
-            "C+", "PI", "SU", "**"   // 第二行：数量增强、玩家忽略、模拟升级、通用
+            "C+", "PI", "SU", "**",  // 第二行：数量增强、玩家忽略、模拟升级、通用
+            "LT", "BH"               // 第三行：抢夺升级、斩首升级（仅模拟升级时显示）
         };
 
-        for (int i = 0; i < 8; i++) {
-            int x = 8 + (i % 4) * 18 + 1;  // 槽位位置 + 1像素偏移（4列布局）
-            int y = 55 + (i / 4) * 18 - 8; // 槽位上方8像素，对应新的槽位位置
+        // 获取当前有效的槽位数量
+        int effectiveSlotCount = 8; // 默认8个槽位
+        if (this.menu.getLevel() != null && this.menu.getLevel().isLoaded(this.menu.getBlockPos())) {
+            var blockEntity = this.menu.getLevel().getBlockEntity(this.menu.getBlockPos());
+            if (blockEntity instanceof com.example.examplemod.blockentity.MobSpawnerBlockEntity spawner) {
+                effectiveSlotCount = spawner.getModuleManager().getEffectiveSlotCount();
+            }
+        }
+
+        for (int i = 0; i < effectiveSlotCount; i++) {
+            int x, y;
+            if (i < 8) {
+                // 前8个槽位：4x2布局，对应新的槽位位置
+                x = 8 + (i % 4) * 18 + 1;  // 槽位位置 + 1像素偏移
+                y = 45 + (i / 4) * 18 - 8; // 槽位上方8像素，对应新的y位置
+            } else {
+                // 额外的2个槽位：右侧
+                x = 8 + 4 * 18 + 10 + ((i - 8) % 2) * 18 + 1; // 右侧位置
+                y = 45 + ((i - 8) / 2) * 18 - 8; // 对应槽位上方
+            }
             guiGraphics.drawString(this.font, slotLabels[i], x, y, 0x666666, false);
         }
 
@@ -323,29 +341,47 @@ public class SpawnEggMobSpawnerScreen extends AbstractContainerScreen<SpawnEggMo
      * 渲染槽位半透明提示
      */
     private void renderSlotHints(GuiGraphics guiGraphics) {
-        // 定义每个槽位允许的模块类型
+        // 定义每个槽位允许的模块类型（与菜单中的slotTypes保持一致）
         SpawnerModuleType[] slotTypes = {
-            SpawnerModuleType.RANGE_REDUCER,    // 槽位0
-            SpawnerModuleType.RANGE_EXPANDER,   // 槽位1
-            SpawnerModuleType.MIN_DELAY_REDUCER, // 槽位2
-            SpawnerModuleType.MAX_DELAY_REDUCER, // 槽位3
-            SpawnerModuleType.COUNT_BOOSTER,    // 槽位4
-            SpawnerModuleType.PLAYER_IGNORER    // 槽位5
+            SpawnerModuleType.RANGE_REDUCER,    // 槽位0：范围缩减器
+            SpawnerModuleType.RANGE_EXPANDER,   // 槽位1：范围扩展器
+            SpawnerModuleType.MIN_DELAY_REDUCER, // 槽位2：最小延迟缩减器
+            SpawnerModuleType.MAX_DELAY_REDUCER, // 槽位3：最大延迟缩减器
+            SpawnerModuleType.COUNT_BOOSTER,    // 槽位4：数量增强器
+            SpawnerModuleType.PLAYER_IGNORER,   // 槽位5：玩家忽略器
+            SpawnerModuleType.SIMULATION_UPGRADE, // 槽位6：模拟升级
+            null,  // 槽位7：通用槽位，允许任何模块类型
+            SpawnerModuleType.LOOTING_UPGRADE,  // 槽位8：抢夺升级（仅模拟升级时可见）
+            SpawnerModuleType.BEHEADING_UPGRADE // 槽位9：斩首升级（仅模拟升级时可见）
         };
 
-        // 获取当前游戏时间用于脉动效果
-        long gameTime = System.currentTimeMillis();
+        // 获取当前有效的槽位数量
+        int effectiveSlotCount = 8; // 默认8个槽位
+        if (this.menu.getLevel() != null && this.menu.getLevel().isLoaded(this.menu.getBlockPos())) {
+            var blockEntity = this.menu.getLevel().getBlockEntity(this.menu.getBlockPos());
+            if (blockEntity instanceof com.example.examplemod.blockentity.MobSpawnerBlockEntity spawner) {
+                effectiveSlotCount = spawner.getModuleManager().getEffectiveSlotCount();
+            }
+        }
 
         // 为每个空槽位渲染半透明提示
-        for (int i = 0; i < 6; i++) {
-            // 计算槽位的屏幕坐标
-            int slotX = this.leftPos + 8 + (i % 3) * 18;
-            int slotY = this.topPos + 55 + (i / 3) * 18;
+        for (int i = 0; i < effectiveSlotCount; i++) {
+            // 计算槽位的屏幕坐标（与菜单布局保持一致）
+            int slotX, slotY;
+            if (i < 8) {
+                // 前8个槽位：4x2布局
+                slotX = this.leftPos + 8 + (i % 4) * 18;
+                slotY = this.topPos + 45 + (i / 4) * 18;
+            } else {
+                // 额外的2个槽位：右侧
+                slotX = this.leftPos + 8 + 4 * 18 + 10 + ((i - 8) % 2) * 18;
+                slotY = this.topPos + 45 + ((i - 8) / 2) * 18;
+            }
 
             // 检查槽位是否为空
             if (this.menu.slots.size() > i + 1) { // +1 因为第一个槽位是刷怪蛋
                 var slot = this.menu.slots.get(i + 1);
-                if (slot.getItem().isEmpty()) {
+                if (slot.getItem().isEmpty() && i < slotTypes.length && slotTypes[i] != null) {
                     // 获取对应的提示物品
                     ItemStack hintItem = SlotHintManager.getHintItem(slotTypes[i]);
                     if (!hintItem.isEmpty()) {

@@ -54,15 +54,21 @@ import net.neoforged.neoforge.network.registration.PayloadRegistrar;
 import com.example.examplemod.fluid.MagicWaterFluid;
 import com.example.examplemod.fluid.MagicWaterFluidType;
 import com.example.examplemod.fluid.MagicWaterClientExtensions;
+import com.example.examplemod.fluid.ExperienceFluid;
+import com.example.examplemod.fluid.ExperienceFluidType;
+import com.example.examplemod.fluid.ExperienceClientExtensions;
 import com.example.examplemod.blockentity.MobSpawnerBlock;
 import com.example.examplemod.blockentity.MobSpawnerBlockEntity;
 import com.example.examplemod.blockentity.MobSpawnerMenu;
 import com.example.examplemod.blockentity.MobSpawnerScreen;
+import com.example.examplemod.block.FluidTankBlock;
+import com.example.examplemod.blockentity.FluidTankBlockEntity;
 import com.example.examplemod.blockentity.SpawnEggMobSpawnerMenu;
 import com.example.examplemod.blockentity.SpawnEggMobSpawnerScreen;
 import com.example.examplemod.client.SpawnAreaRenderer;
 import com.example.examplemod.network.MobSpawnerUpdatePacket;
 import com.example.examplemod.network.SpawnAreaDataPacket;
+import com.example.examplemod.event.EntityHeadDropEvent;
 import com.example.examplemod.network.SpawnOffsetUpdatePacket;
 import com.example.examplemod.network.RedstoneModeUpdatePacket;
 import com.example.examplemod.network.RedstoneModeClientSyncPacket;
@@ -118,6 +124,40 @@ public class ExampleMod {
         () -> new BucketItem(MAGIC_WATER.get(), new Item.Properties()
             .setId(ResourceKey.create(Registries.ITEM, ResourceLocation.fromNamespaceAndPath(MODID, "magic_water_bucket")))
             .craftRemainder(Items.BUCKET).stacksTo(1)));
+
+    // Experience Fluid Type
+    public static final DeferredHolder<FluidType, FluidType> EXPERIENCE_TYPE = FLUID_TYPES.register("experience", ExperienceFluidType::new);
+
+    // Experience Fluids
+    public static final DeferredHolder<Fluid, FlowingFluid> EXPERIENCE = FLUIDS.register("experience", () -> new ExperienceFluid.Source());
+    public static final DeferredHolder<Fluid, FlowingFluid> FLOWING_EXPERIENCE = FLUIDS.register("flowing_experience", () -> new ExperienceFluid.Flowing());
+
+    // Experience Block
+    public static final DeferredBlock<LiquidBlock> EXPERIENCE_BLOCK = BLOCKS.register("experience",
+        () -> new LiquidBlock(EXPERIENCE.get(), BlockBehaviour.Properties.of()
+            .setId(ResourceKey.create(Registries.BLOCK, ResourceLocation.fromNamespaceAndPath(MODID, "experience")))
+            .mapColor(MapColor.COLOR_LIGHT_GREEN).replaceable().noCollission().strength(100.0F).pushReaction(PushReaction.DESTROY)
+            .noLootTable().liquid().sound(SoundType.EMPTY).lightLevel((state) -> 10)));
+
+    // Experience Bucket
+    public static final DeferredItem<BucketItem> EXPERIENCE_BUCKET = ITEMS.register("experience_bucket",
+        () -> new BucketItem(EXPERIENCE.get(), new Item.Properties()
+            .setId(ResourceKey.create(Registries.ITEM, ResourceLocation.fromNamespaceAndPath(MODID, "experience_bucket")))
+            .craftRemainder(Items.BUCKET).stacksTo(1)));
+
+    // Fluid Tank Block
+    public static final DeferredBlock<FluidTankBlock> FLUID_TANK_BLOCK = BLOCKS.register("fluid_tank",
+        () -> new FluidTankBlock(BlockBehaviour.Properties.of()
+            .setId(ResourceKey.create(Registries.BLOCK, ResourceLocation.fromNamespaceAndPath(MODID, "fluid_tank")))
+            .mapColor(MapColor.METAL).strength(3.0F).requiresCorrectToolForDrops().noOcclusion()));
+
+    // Fluid Tank Block Item
+    public static final DeferredItem<BlockItem> FLUID_TANK_BLOCK_ITEM = ITEMS.registerSimpleBlockItem("fluid_tank", FLUID_TANK_BLOCK);
+
+    // Fluid Tank Block Entity
+    public static final DeferredHolder<BlockEntityType<?>, BlockEntityType<FluidTankBlockEntity>> FLUID_TANK_BLOCK_ENTITY =
+        BLOCK_ENTITY_TYPES.register("fluid_tank", () -> new BlockEntityType(
+            FluidTankBlockEntity::new, FLUID_TANK_BLOCK.get()));
 
     // Mob Spawner Block
     public static final DeferredBlock<MobSpawnerBlock> MOB_SPAWNER_BLOCK = BLOCKS.register("mob_spawner",
@@ -177,6 +217,22 @@ public class ExampleMod {
             .setId(ResourceKey.create(Registries.ITEM, ResourceLocation.fromNamespaceAndPath(MODID, "simulation_upgrade_module")))
             .stacksTo(16), SpawnerModuleType.SIMULATION_UPGRADE));
 
+    public static final DeferredItem<SpawnerModuleItem> LOOTING_UPGRADE_MODULE = ITEMS.register("looting_upgrade_module",
+        () -> new SpawnerModuleItem(new Item.Properties()
+            .setId(ResourceKey.create(Registries.ITEM, ResourceLocation.fromNamespaceAndPath(MODID, "looting_upgrade_module")))
+            .stacksTo(16), SpawnerModuleType.LOOTING_UPGRADE));
+
+    public static final DeferredItem<SpawnerModuleItem> BEHEADING_UPGRADE_MODULE = ITEMS.register("beheading_upgrade_module",
+        () -> new SpawnerModuleItem(new Item.Properties()
+            .setId(ResourceKey.create(Registries.ITEM, ResourceLocation.fromNamespaceAndPath(MODID, "beheading_upgrade_module")))
+            .stacksTo(16), SpawnerModuleType.BEHEADING_UPGRADE));
+
+    // Experience Granule Item
+    public static final DeferredItem<com.example.examplemod.item.ExperienceGranuleItem> EXPERIENCE_GRANULE = ITEMS.register("experience_granule",
+        () -> new com.example.examplemod.item.ExperienceGranuleItem(new Item.Properties()
+            .setId(ResourceKey.create(Registries.ITEM, ResourceLocation.fromNamespaceAndPath(MODID, "experience_granule")))
+            .stacksTo(64)));
+
     // Creates a creative tab with the id "examplemod:example_tab" for the example item, that is placed after the combat tab
     public static final DeferredHolder<CreativeModeTab, CreativeModeTab> EXAMPLE_TAB = CREATIVE_MODE_TABS.register("example_tab", () -> CreativeModeTab.builder()
             .title(Component.translatable("itemGroup.examplemod")) //The language key for the title of your CreativeModeTab
@@ -186,6 +242,7 @@ public class ExampleMod {
                 output.accept(EXAMPLE_ITEM.get()); // Add the example item to the tab. For your own tabs, this method is preferred over the event
                 output.accept(MAGIC_WATER_BUCKET.get()); // Add the magic water bucket to the tab
                 output.accept(MOB_SPAWNER_BLOCK_ITEM.get()); // Add the mob spawner block to the tab
+                output.accept(EXPERIENCE_GRANULE.get()); // Add the experience granule to the tab
 
                 // Add spawner modules
                 output.accept(RANGE_REDUCER_MODULE.get());
@@ -195,6 +252,8 @@ public class ExampleMod {
                 output.accept(COUNT_BOOSTER_MODULE.get());
                 output.accept(PLAYER_IGNORER_MODULE.get());
                 output.accept(SIMULATION_UPGRADE_MODULE.get());
+                output.accept(LOOTING_UPGRADE_MODULE.get());
+                output.accept(BEHEADING_UPGRADE_MODULE.get());
             }).build());
 
     // The constructor for the mod class is the first code that is run when your mod is loaded.
@@ -222,6 +281,12 @@ public class ExampleMod {
         // Note that this is necessary if and only if we want *this* class (ExampleMod) to respond directly to events.
         // Do not add this line if there are no @SubscribeEvent-annotated functions in this class, like onServerStarting() below.
         NeoForge.EVENT_BUS.register(this);
+
+        // Register event handlers
+        NeoForge.EVENT_BUS.register(new EntityHeadDropEvent());
+        NeoForge.EVENT_BUS.register(new com.example.examplemod.event.ExperienceGranuleDropEvent());
+
+
 
         // Register the item to a creative tab
         modEventBus.addListener(this::addCreative);
@@ -282,7 +347,9 @@ public class ExampleMod {
         }
         if (event.getTabKey() == CreativeModeTabs.TOOLS_AND_UTILITIES) {
             event.accept(MAGIC_WATER_BUCKET);
+            event.accept(EXPERIENCE_BUCKET);
             event.accept(MOB_SPAWNER_BLOCK_ITEM);
+            event.accept(FLUID_TANK_BLOCK_ITEM);
         }
     }
 
@@ -305,6 +372,7 @@ public class ExampleMod {
         public static void registerClientExtensions(RegisterClientExtensionsEvent event) {
             // 注册流体客户端扩展
             event.registerFluidType(new MagicWaterClientExtensions(), MAGIC_WATER_TYPE.get());
+            event.registerFluidType(new ExperienceClientExtensions(), EXPERIENCE_TYPE.get());
         }
 
         @SubscribeEvent
@@ -322,4 +390,6 @@ public class ExampleMod {
             }
         }
     }
+
+
 }

@@ -38,8 +38,17 @@ public class SlotHintManager {
         HINT_ITEMS.put(SpawnerModuleType.COUNT_BOOSTER, 
             new ItemStack(ExampleMod.COUNT_BOOSTER_MODULE.get()));
         
-        HINT_ITEMS.put(SpawnerModuleType.PLAYER_IGNORER, 
+        HINT_ITEMS.put(SpawnerModuleType.PLAYER_IGNORER,
             new ItemStack(ExampleMod.PLAYER_IGNORER_MODULE.get()));
+
+        HINT_ITEMS.put(SpawnerModuleType.SIMULATION_UPGRADE,
+            new ItemStack(ExampleMod.SIMULATION_UPGRADE_MODULE.get()));
+
+        HINT_ITEMS.put(SpawnerModuleType.LOOTING_UPGRADE,
+            new ItemStack(ExampleMod.LOOTING_UPGRADE_MODULE.get()));
+
+        HINT_ITEMS.put(SpawnerModuleType.BEHEADING_UPGRADE,
+            new ItemStack(ExampleMod.BEHEADING_UPGRADE_MODULE.get()));
     }
     
     /**

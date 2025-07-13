@@ -16,6 +16,8 @@
   "item.examplemod.count_booster_module": "数量增强模块",
   "item.examplemod.player_ignorer_module": "玩家忽略模块",
   "item.examplemod.simulation_upgrade_module": "模拟升级模块",
+  "item.examplemod.looting_upgrade_module": "抢夺升级模块",
+  "item.examplemod.beheading_upgrade_module": "斩首升级模块",
 
   "examplemod.configuration.title": "示例模组配置",
   "examplemod.configuration.section.examplemod.common.toml": "示例模组配置",

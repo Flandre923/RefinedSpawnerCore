@@ -1,6 +1,7 @@
 package com.example.examplemod.blockentity;
 
 import com.example.examplemod.ExampleMod;
+import com.example.examplemod.spawner.SpawnerModuleType;
 import net.minecraft.core.BlockPos;
 import net.minecraft.network.FriendlyByteBuf;
 import net.minecraft.world.entity.player.Inventory;
@@ -73,13 +74,23 @@ public class SpawnEggMobSpawnerMenu extends AbstractContainerMenu {
                     com.example.examplemod.spawner.SpawnerModuleType.COUNT_BOOSTER,    // 槽位4：数量增强器
                     com.example.examplemod.spawner.SpawnerModuleType.PLAYER_IGNORER,   // 槽位5：玩家忽略器
                     com.example.examplemod.spawner.SpawnerModuleType.SIMULATION_UPGRADE, // 槽位6：模拟升级
-                    null  // 槽位7：通用槽位，允许任何模块类型
+                    null,  // 槽位7：通用槽位，允许任何模块类型
+                    com.example.examplemod.spawner.SpawnerModuleType.LOOTING_UPGRADE,  // 槽位8：抢夺升级（仅模拟升级时可见）
+                    com.example.examplemod.spawner.SpawnerModuleType.BEHEADING_UPGRADE // 槽位9：斩首升级（仅模拟升级时可见）
                 };
 
-                // 添加8个模块槽位，4x2布局，每个槽位限制特定模块类型
-                for (int i = 0; i < 8; i++) {
-                    int x = 8 + (i % 4) * 18;  // 4列
-                    int y = 55 + (i / 4) * 18; // 2行
+                // 添加所有10个模块槽位，重新布局避免与调整按钮重合
+                for (int i = 0; i < 10; i++) {
+                    int x, y;
+                    if (i < 8) {
+                        // 前8个槽位：4x2布局，向上移动
+                        x = 8 + (i % 4) * 18;
+                        y = 45 + (i / 4) * 18; // 向上移动10像素
+                    } else {
+                        // 额外的2个槽位：放在右侧
+                        x = 8 + 4 * 18 + 10 + ((i - 8) % 2) * 18; // 右侧，间隔10像素
+                        y = 45 + ((i - 8) / 2) * 18;
+                    }
                     this.addSlot(new ModuleSlot(moduleManager, i, x, y, slotTypes[i]));
                 }
             }
@@ -104,40 +115,55 @@ public class SpawnEggMobSpawnerMenu extends AbstractContainerMenu {
     public ItemStack quickMoveStack(Player player, int index) {
         ItemStack itemstack = ItemStack.EMPTY;
         Slot slot = this.slots.get(index);
-        
+
         if (slot != null && slot.hasItem()) {
             ItemStack itemstack1 = slot.getItem();
             itemstack = itemstack1.copy();
-            
+
+            // 计算槽位范围
+            int spawnEggSlotEnd = 1; // 刷怪蛋槽位：0
+            int moduleSlotEnd = spawnEggSlotEnd + 10; // 模块槽位：1-10
+            int playerInventoryEnd = moduleSlotEnd + 27; // 玩家背包：11-37
+            int hotbarEnd = playerInventoryEnd + 9; // 快捷栏：38-46
+
             if (index == 0) {
                 // 从刷怪蛋槽位移动到玩家背包
-                if (!this.moveItemStackTo(itemstack1, 1, this.slots.size(), true)) {
+                if (!this.moveItemStackTo(itemstack1, moduleSlotEnd, hotbarEnd, true)) {
                     return ItemStack.EMPTY;
                 }
-            } else if (index >= 1 && index < this.slots.size()) {
-                // 从玩家背包移动到刷怪蛋槽位
+            } else if (index >= spawnEggSlotEnd && index < moduleSlotEnd) {
+                // 从模块槽位移动到玩家背包
+                if (!this.moveItemStackTo(itemstack1, moduleSlotEnd, hotbarEnd, true)) {
+                    return ItemStack.EMPTY;
+                }
+            } else if (index >= moduleSlotEnd && index < hotbarEnd) {
+                // 从玩家背包移动到相应槽位
                 if (itemstack1.getItem() instanceof SpawnEggItem) {
-                    if (!this.moveItemStackTo(itemstack1, 0, 1, false)) {
+                    if (!this.moveItemStackTo(itemstack1, 0, spawnEggSlotEnd, false)) {
+                        return ItemStack.EMPTY;
+                    }
+                } else if (itemstack1.getItem() instanceof com.example.examplemod.item.SpawnerModuleItem) {
+                    if (!this.moveItemStackTo(itemstack1, spawnEggSlotEnd, moduleSlotEnd, false)) {
                         return ItemStack.EMPTY;
                     }
                 } else {
                     return ItemStack.EMPTY;
                 }
             }
-            
+
             if (itemstack1.isEmpty()) {
                 slot.set(ItemStack.EMPTY);
             } else {
                 slot.setChanged();
             }
-            
+
             if (itemstack1.getCount() == itemstack.getCount()) {
                 return ItemStack.EMPTY;
             }
-            
+
             slot.onTake(player, itemstack1);
         }
-        
+
         return itemstack;
     }
 
@@ -225,19 +251,45 @@ public class SpawnEggMobSpawnerMenu extends AbstractContainerMenu {
 
         @Override
         public boolean mayPlace(ItemStack stack) {
+            // 检查槽位是否可用
+            if (!moduleManager.isSlotAvailable(moduleIndex)) {
+                return false;
+            }
+
             if (!com.example.examplemod.spawner.SpawnerModuleType.isValidModule(stack)) {
                 return false;
             }
 
-            // 检查是否是允许的模块类型
-            com.example.examplemod.spawner.SpawnerModuleType moduleType =
-                com.example.examplemod.spawner.SpawnerModuleType.fromItemStack(stack);
-            return moduleType == allowedType;
+            // 如果指定了允许的类型，检查是否匹配
+            if (allowedType != null) {
+                com.example.examplemod.spawner.SpawnerModuleType moduleType =
+                    com.example.examplemod.spawner.SpawnerModuleType.fromItemStack(stack);
+                return moduleType == allowedType;
+            }
+
+            // 通用槽位允许任何模块类型
+            return true;
+        }
+
+        @Override
+        public boolean isActive() {
+            // 只有可用的槽位才是活跃的
+            return moduleManager.isSlotAvailable(moduleIndex);
         }
 
         @Override
         public int getMaxStackSize() {
-            return 16;
+            // 升级模块和延迟模块可以堆叠到16个，其他模块不能堆叠
+            if (allowedType == com.example.examplemod.spawner.SpawnerModuleType.LOOTING_UPGRADE ||
+                allowedType == com.example.examplemod.spawner.SpawnerModuleType.BEHEADING_UPGRADE ||
+                allowedType == com.example.examplemod.spawner.SpawnerModuleType.MIN_DELAY_REDUCER ||
+                allowedType == com.example.examplemod.spawner.SpawnerModuleType.MAX_DELAY_REDUCER ||
+                allowedType == SpawnerModuleType.RANGE_REDUCER||
+                allowedType == SpawnerModuleType.RANGE_EXPANDER ||
+                allowedType == SpawnerModuleType.COUNT_BOOSTER) {
+                return com.example.examplemod.spawner.SpawnerModuleConfig.MAX_UPGRADE_STACK_SIZE;
+            }
+            return 1; // 其他模块不能堆叠
         }
 
         public com.example.examplemod.spawner.SpawnerModuleType getAllowedType() {

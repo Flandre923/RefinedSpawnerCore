@@ -40,6 +40,15 @@ public class SpawnerModuleConfig {
 
     /** 模拟升级：容器搜索范围 */
     public static final int SIMULATION_CONTAINER_SEARCH_RANGE = 5;
+
+    /** 抢夺升级：每个模块提供的抢夺等级 */
+    public static final int LOOTING_UPGRADE_VALUE = 1;
+
+    /** 斩首升级：每个模块提供的斩首等级 */
+    public static final int BEHEADING_UPGRADE_VALUE = 1;
+
+    /** 升级模块：最大堆叠数量 */
+    public static final int MAX_UPGRADE_STACK_SIZE = 16;
     
     // ==================== 限制配置 ====================
     
@@ -89,6 +98,8 @@ public class SpawnerModuleConfig {
             case COUNT_BOOSTER -> COUNT_BOOSTER_VALUE;
             case PLAYER_IGNORER -> 0; // 玩家忽略器不需要数值效果
             case SIMULATION_UPGRADE -> 0; // 模拟升级不需要数值效果
+            case LOOTING_UPGRADE -> LOOTING_UPGRADE_VALUE;
+            case BEHEADING_UPGRADE -> BEHEADING_UPGRADE_VALUE;
         };
     }
     
