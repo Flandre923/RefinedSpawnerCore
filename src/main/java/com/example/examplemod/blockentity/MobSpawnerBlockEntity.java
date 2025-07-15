@@ -9,6 +9,7 @@ import net.minecraft.core.BlockPos;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.util.RandomSource;
 import net.minecraft.util.random.Weighted;
+import net.minecraft.world.*;
 import net.minecraft.world.entity.*;
 import net.minecraft.world.entity.item.ItemEntity;
 import net.minecraft.world.entity.monster.EnderMan;
@@ -25,7 +26,6 @@ import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.storage.ValueInput;
 import net.minecraft.world.level.storage.ValueOutput;
 import net.minecraft.world.phys.AABB;
-import net.minecraft.world.MenuProvider;
 import net.minecraft.network.chat.Component;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.inventory.AbstractContainerMenu;
@@ -35,14 +35,12 @@ import net.minecraft.world.entity.player.Inventory;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
-import net.minecraft.world.Container;
+
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.SpawnEggItem;
 import net.minecraft.core.NonNullList;
 import net.minecraft.world.inventory.SimpleContainerData;
 import net.minecraft.server.level.ServerPlayer;
-import net.minecraft.world.ContainerHelper;
-import net.minecraft.world.ItemStackWithSlot;
 import com.example.examplemod.spawner.SpawnerModuleManager;
 import com.example.examplemod.spawner.SpawnerModuleType;
 import com.example.examplemod.util.SpawnerFakePlayer;
@@ -171,16 +169,10 @@ public class MobSpawnerBlockEntity extends BlockEntity implements MenuProvider, 
             System.out.println("MobSpawnerBlockEntity: Active modules: " + blockEntity.moduleManager.getInstalledModulesInfo());
         }
 
-        // 检查附近实体数量（使用增强后的范围）
-        AABB checkArea = new AABB(pos).inflate(enhancedStats.spawnRange());
-        List<Mob> nearbyMobs = serverLevel.getEntitiesOfClass(Mob.class, checkArea);
-        if (nearbyMobs.size() >= enhancedStats.maxNearbyEntities()) {
-            return;
-        }
-
         // 检查是否启用模拟升级模式
         boolean spawned = false;
         if (blockEntity.moduleManager.hasSimulationUpgrade()) {
+            // 模拟升级模式：不需要检查附近实体数量，因为不会真正生成实体
             // 模拟升级模式：直接生成掉落物
             for (int i = 0; i < enhancedStats.spawnCount(); i++) {
                 if (blockEntity.simulateSpawn(serverLevel, pos, enhancedStats.spawnRange())) {
@@ -188,6 +180,13 @@ public class MobSpawnerBlockEntity extends BlockEntity implements MenuProvider, 
                 }
             }
         } else {
+            // 正常模式：需要检查附近实体数量
+            AABB checkArea = new AABB(pos).inflate(enhancedStats.spawnRange());
+            List<Mob> nearbyMobs = serverLevel.getEntitiesOfClass(Mob.class, checkArea);
+            if (nearbyMobs.size() >= enhancedStats.maxNearbyEntities()) {
+                return; // 附近实体太多，停止生成
+            }
+
             // 正常模式：生成生物
             for (int i = 0; i < enhancedStats.spawnCount(); i++) {
                 if (blockEntity.spawnMob(serverLevel, pos, enhancedStats.spawnRange())) {
@@ -201,6 +200,9 @@ public class MobSpawnerBlockEntity extends BlockEntity implements MenuProvider, 
             int minDelay = Math.max(1, enhancedStats.minSpawnDelay());
             int maxDelay = Math.max(minDelay, enhancedStats.maxSpawnDelay());
             blockEntity.spawnDelay = minDelay + serverLevel.random.nextInt(maxDelay - minDelay + 1);
+        } else if (blockEntity.moduleManager.hasSimulationUpgrade()) {
+            // 模拟模式下如果没有生成成功（容器满），设置较长延迟避免频繁检查
+            blockEntity.spawnDelay = 100; // 5秒后再次尝试
         }
     }
 
@@ -268,6 +270,13 @@ public class MobSpawnerBlockEntity extends BlockEntity implements MenuProvider, 
             if (!mob.checkSpawnRules(level, EntitySpawnReason.SPAWNER) || !mob.checkSpawnObstruction(level)) {
                 continue;
             }
+
+            // 关键修复：调用finalizeSpawn来生成装备（参考BlockDreadfulDirt的逻辑）
+            mob.finalizeSpawn(level, level.getCurrentDifficultyAt(spawnPos), EntitySpawnReason.SPAWNER, null);
+
+            // 调用EventHooks.finalizeMobSpawn来触发装备生成事件
+            EventHooks.finalizeMobSpawn(mob, level, level.getCurrentDifficultyAt(spawnPos), EntitySpawnReason.SPAWNER, null);
+
             // 生成实体
             level.addFreshEntity(mob);
             // 播放生成效果
@@ -331,6 +340,27 @@ public class MobSpawnerBlockEntity extends BlockEntity implements MenuProvider, 
         // 设置实体位置
         livingEntity.setPos(spawnPos.getX() + 0.5, spawnPos.getY(), spawnPos.getZ() + 0.5);
 
+        // 关键修复：为模拟生成的实体也生成装备（参考BlockDreadfulDirt的逻辑）
+        if (livingEntity instanceof Mob mob) {
+            // 对史莱姆进行特殊处理，避免在模拟模式下出现分裂问题
+            if (mob instanceof net.minecraft.world.entity.monster.Slime slime) {
+                // 史莱姆完全跳过finalizeSpawn，避免死亡时分裂
+                // 只设置一个随机大小用于掉落物计算
+                int size = level.random.nextInt(3) + 1;
+                slime.setSize(size, false);
+                // 不调用任何spawn相关方法，避免分裂机制
+            } else {
+                // 在模拟模式下，手动添加基础装备，避免调用finalizeSpawn
+                // 这样可以有装备掉落，但不会创建骑乘关系
+
+                // 只设置最基本的属性
+                mob.setLeftHanded(level.random.nextFloat() < 0.05F);
+
+                // 手动添加基础装备（简化版本，避免复杂逻辑）
+                addBasicEquipmentForSimulation(mob, level.random, level.getCurrentDifficultyAt(spawnPos));
+            }
+        }
+
         // 创建FakePlayer并设置假武器
         SpawnerFakePlayer fakePlayer = new SpawnerFakePlayer(level, spawnerPos);
         int lootingLevel = this.moduleManager.getLootingLevel();
@@ -340,21 +370,102 @@ public class MobSpawnerBlockEntity extends BlockEntity implements MenuProvider, 
         // 使用FakePlayer击杀生物，触发原版掠夺机制
         List<ItemStack> drops = killEntityWithFakePlayer(livingEntity, fakePlayer, level);
 
+        // 检查周围容器是否有足够空间存储掉落物
+        if (!hasEnoughContainerSpace(level, spawnerPos, drops)) {
+            System.out.println("MobSpawnerBlockEntity: Not enough container space, skipping simulation");
+            return false; // 容器空间不足，停止工作
+        }
+
         // 尝试将掉落物插入到周围的容器中
         boolean inserted = insertDropsIntoContainers(level, spawnerPos, drops);
 
-        // 生成经验流体
-        int experience = ExperienceFluidHelper.getExperienceFromEntity(livingEntity);
-        boolean experienceStored = ExperienceFluidHelper.storeExperienceFluid(level, spawnerPos, experience);
+        // 只有成功插入容器才继续处理
+        if (inserted) {
+            // 生成经验流体
+            int experience = ExperienceFluidHelper.getExperienceFromEntity(livingEntity);
+            boolean experienceStored = ExperienceFluidHelper.storeExperienceFluid(level, spawnerPos, experience);
 
-        // 播放生成效果（在刷怪器位置）
-        level.levelEvent(2004, spawnerPos, 0);
-        System.out.println("MobSpawnerBlockEntity: Simulated spawn of " + entityType.getDescriptionId() +
-            " with " + drops.size() + " drops and " + experience + " experience using FakePlayer" +
-            (inserted ? " (inserted into containers)" : " (dropped to ground)"));
+            // 播放轻量的模拟生成效果（比正常生成更少的粒子）
+            playSimulationEffect(level, spawnerPos);
+            System.out.println("MobSpawnerBlockEntity: Simulated spawn of " + entityType.getDescriptionId() +
+                " with " + drops.size() + " drops and " + experience + " experience using FakePlayer");
+            return true;
+        } else {
+            // 容器满了，不播放粒子特效，不生成经验
+            System.out.println("MobSpawnerBlockEntity: Container full, simulation failed for " + entityType.getDescriptionId());
+            return false;
+        }
+    }
 
-        // 无论是否成功插入容器，都认为生成成功，这样可以正确重置延迟
-        return true;
+    /**
+     * 播放模拟模式的轻量粒子特效
+     */
+    private void playSimulationEffect(ServerLevel level, BlockPos pos) {
+        // 选项1：使用更轻量的事件效果
+        // level.levelEvent(2000, pos, 0); // 烟雾效果，比刷怪笼轻量
+
+        // 选项2：生成少量自定义粒子（推荐）
+        for (int i = 0; i < 4; i++) { // 只生成4个粒子，比原版少很多
+            double x = pos.getX() + 0.5 + (level.random.nextDouble() - 0.5) * 0.8;
+            double y = pos.getY() + 0.5 + level.random.nextDouble() * 0.5;
+            double z = pos.getZ() + 0.5 + (level.random.nextDouble() - 0.5) * 0.8;
+
+            // 使用魔法粒子，表示模拟效果
+            level.sendParticles(
+                net.minecraft.core.particles.ParticleTypes.ENCHANT,
+                x, y, z,
+                1, // 每次只生成1个粒子
+                0.0, 0.05, 0.0, // 轻微向上的速度
+                0.1 // 速度随机性
+            );
+        }
+
+        // 选项3：如果想要更少的粒子，可以减少循环次数或添加概率
+        // if (level.random.nextFloat() < 0.7f) { // 70%概率生成粒子
+        //     // 生成粒子代码
+        // }
+    }
+
+    /**
+     * 为模拟模式下的怪物添加基础装备
+     * 简化版本，避免复杂的生成逻辑和骑乘关系
+     */
+    private void addBasicEquipmentForSimulation(Mob mob, RandomSource random, DifficultyInstance difficulty) {
+        // 只在较高难度下生成装备，模拟原版逻辑
+        if (random.nextFloat() < 0.15F * difficulty.getSpecialMultiplier()) {
+            // 根据怪物类型添加基础装备
+            if (mob instanceof net.minecraft.world.entity.monster.Skeleton) {
+                // 骷髅：弓
+                mob.setItemSlot(EquipmentSlot.MAINHAND, new ItemStack(net.minecraft.world.item.Items.BOW));
+            } else if (mob instanceof net.minecraft.world.entity.monster.Zombie) {
+                // 僵尸：有概率拿剑
+                if (random.nextFloat() < 0.05F) {
+                    mob.setItemSlot(EquipmentSlot.MAINHAND, new ItemStack(net.minecraft.world.item.Items.IRON_SWORD));
+                }
+            } else if (mob instanceof net.minecraft.world.entity.monster.WitherSkeleton) {
+                // 凋灵骷髅：石剑
+                mob.setItemSlot(EquipmentSlot.MAINHAND, new ItemStack(net.minecraft.world.item.Items.STONE_SWORD));
+            }
+
+            // 简单的盔甲生成（只在困难模式下）
+            if (difficulty.getDifficulty() == net.minecraft.world.Difficulty.HARD && random.nextFloat() < 0.1F) {
+                // 随机添加一件盔甲
+                EquipmentSlot[] armorSlots = {EquipmentSlot.HEAD, EquipmentSlot.CHEST, EquipmentSlot.LEGS, EquipmentSlot.FEET};
+                EquipmentSlot slot = armorSlots[random.nextInt(armorSlots.length)];
+
+                ItemStack armor = switch (slot) {
+                    case HEAD -> new ItemStack(net.minecraft.world.item.Items.LEATHER_HELMET);
+                    case CHEST -> new ItemStack(net.minecraft.world.item.Items.LEATHER_CHESTPLATE);
+                    case LEGS -> new ItemStack(net.minecraft.world.item.Items.LEATHER_LEGGINGS);
+                    case FEET -> new ItemStack(net.minecraft.world.item.Items.LEATHER_BOOTS);
+                    default -> ItemStack.EMPTY;
+                };
+
+                if (!armor.isEmpty()) {
+                    mob.setItemSlot(slot, armor);
+                }
+            }
+        }
     }
 
     /**
@@ -370,8 +481,12 @@ public class MobSpawnerBlockEntity extends BlockEntity implements MenuProvider, 
             // 收集掉落物的临时列表
             List<ItemEntity> dropEntities = new ArrayList<>();
 
-            // 设置实体血量为0来模拟死亡（这样斩首事件才会触发）
-            entity.setHealth(0.0F);
+            // 对史莱姆特殊处理，避免设置血量为0触发分裂
+            if (!(entity instanceof net.minecraft.world.entity.monster.Slime)) {
+                // 设置实体血量为0来模拟死亡（这样斩首事件才会触发）
+                entity.setHealth(0.0F);
+            }
+            // 史莱姆不设置血量为0，避免分裂机制
 
             // 创建LivingDropsEvent来捕获掉落物
             LivingDropsEvent dropsEvent = new LivingDropsEvent(entity, damageSource, dropEntities, true);
@@ -615,6 +730,63 @@ public class MobSpawnerBlockEntity extends BlockEntity implements MenuProvider, 
 
 
     /**
+     * 检查周围容器是否有足够空间存储掉落物
+     */
+    private boolean hasEnoughContainerSpace(ServerLevel level, BlockPos spawnerPos, List<ItemStack> drops) {
+        if (drops.isEmpty()) {
+            return true;
+        }
+
+        // 搜索周围的ItemHandler
+        List<IItemHandler> itemHandlers = findNearbyItemHandlers(level, spawnerPos);
+
+        if (itemHandlers.isEmpty()) {
+            return false; // 没有容器，无法存储
+        }
+
+        // 模拟插入所有掉落物，检查是否能完全插入
+        List<ItemStack> testDrops = new ArrayList<>();
+        for (ItemStack stack : drops) {
+            testDrops.add(stack.copy()); // 复制物品栈进行测试
+        }
+
+        for (IItemHandler handler : itemHandlers) {
+            if (testDrops.isEmpty()) {
+                break;
+            }
+
+            // 模拟插入到当前ItemHandler
+            testDrops = simulateInsertItemsIntoItemHandler(handler, testDrops);
+        }
+
+        // 如果所有物品都能插入，返回true
+        return testDrops.isEmpty();
+    }
+
+    /**
+     * 模拟将物品插入到ItemHandler中，不实际插入
+     */
+    private List<ItemStack> simulateInsertItemsIntoItemHandler(IItemHandler handler, List<ItemStack> items) {
+        List<ItemStack> remaining = new ArrayList<>();
+
+        for (ItemStack stack : items) {
+            ItemStack leftover = stack.copy();
+
+            // 尝试插入到每个槽位
+            for (int slot = 0; slot < handler.getSlots() && !leftover.isEmpty(); slot++) {
+                leftover = handler.insertItem(slot, leftover, true); // simulate = true
+            }
+
+            // 如果还有剩余，添加到剩余列表
+            if (!leftover.isEmpty()) {
+                remaining.add(leftover);
+            }
+        }
+
+        return remaining;
+    }
+
+    /**
      * 将掉落物插入到周围的容器中 - 使用NeoForge ItemHandler
      */
     private boolean insertDropsIntoContainers(ServerLevel level, BlockPos spawnerPos, List<ItemStack> drops) {
@@ -642,20 +814,13 @@ public class MobSpawnerBlockEntity extends BlockEntity implements MenuProvider, 
             remainingDrops = insertItemsIntoItemHandler(handler, remainingDrops);
         }
 
-        // 如果还有剩余物品，掉落到地面
-        if (!remainingDrops.isEmpty()) {
-            BlockPos dropPos = spawnerPos.above();
-            for (ItemStack stack : remainingDrops) {
-                ItemEntity itemEntity = new ItemEntity(
-                    level, dropPos.getX() + 0.5, dropPos.getY(), dropPos.getZ() + 0.5, stack
-                );
-                level.addFreshEntity(itemEntity);
-            }
-            System.out.println("MobSpawnerBlockEntity: Dropped " + remainingDrops.size() + " items to ground");
-        }
-
+        // 在模拟模式下，不掉落物品到地面，只有完全插入才算成功
         boolean allInserted = remainingDrops.isEmpty();
-        System.out.println("MobSpawnerBlockEntity: Inserted " + (drops.size() - remainingDrops.size()) + "/" + drops.size() + " items into containers");
+        if (!allInserted) {
+            System.out.println("MobSpawnerBlockEntity: Could not insert all items (" + remainingDrops.size() + " remaining), containers are full");
+        } else {
+            System.out.println("MobSpawnerBlockEntity: Successfully inserted all " + drops.size() + " items into containers");
+        }
         return allInserted;
     }
 
