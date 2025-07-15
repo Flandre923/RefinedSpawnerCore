@@ -40,27 +40,21 @@ public class ExperienceGranuleItem extends Item {
             int experienceValue = getExperienceValue(itemStack);
             
             if (experienceValue <= 0) {
-                experienceValue = 1; // 默认经验值
+                experienceValue = 10; // 默认经验值改为10（更合理的数值）
             }
             
             // 检查是否按住Shift
             boolean isShiftPressed = player.isShiftKeyDown();
             int itemsToConsume = isShiftPressed ? itemStack.getCount() : 1;
             
-            // 生成经验球
-            for (int i = 0; i < itemsToConsume; i++) {
-                ExperienceOrb experienceOrb = new ExperienceOrb(level, 
-                    player.getX(), 
-                    player.getY() + 0.5, 
-                    player.getZ(), 
-                    experienceValue);
-                level.addFreshEntity(experienceOrb);
-            }
+            // 直接给玩家经验，而不是生成经验球（参考Mob Grinding Utils的做法）
+            int totalExperience = experienceValue * itemsToConsume;
+            player.giveExperiencePoints(totalExperience);
             
-            // 播放音效
-            level.playSound(null, player.getX(), player.getY(), player.getZ(), 
-                SoundEvents.EXPERIENCE_ORB_PICKUP, SoundSource.PLAYERS, 
-                0.5f, 1.0f + (level.random.nextFloat() - level.random.nextFloat()) * 0.4f);
+            // 播放音效（参考Mob Grinding Utils的音效设置）
+            level.playSound(null, player.getX(), player.getY(), player.getZ(),
+                SoundEvents.EXPERIENCE_ORB_PICKUP, SoundSource.PLAYERS,
+                0.5f, 0.8f + level.random.nextFloat() * 0.4f);
             
             // 消耗物品
             if (!player.getAbilities().instabuild) {
@@ -69,7 +63,7 @@ public class ExperienceGranuleItem extends Item {
             
             // 发送消息给玩家
             if (isShiftPressed && itemsToConsume > 1) {
-                ((ServerPlayer)player).sendSystemMessage(Component.literal("Used " + itemsToConsume + " Experience Granules, gained " + (experienceValue * itemsToConsume) + " experience"));
+                ((ServerPlayer)player).sendSystemMessage(Component.literal("Used " + itemsToConsume + " Experience Granules, gained " + totalExperience + " experience"));
             } else {
                 ((ServerPlayer)player).sendSystemMessage((Component.literal("Used Experience Granule, gained " + experienceValue + " experience")));
             }
@@ -89,7 +83,7 @@ public class ExperienceGranuleItem extends Item {
                 return tag.getInt("ExperienceValue").orElse(0);
             }
         }
-        return 1; // 默认经验值
+        return 10; // 默认经验值改为10（更合理的数值）
     }
     
     /**
@@ -115,9 +109,9 @@ public class ExperienceGranuleItem extends Item {
         super.appendHoverText(stack, context, tooltipDisplay, tooltipAdder, flag);
 
         int experienceValue = getExperienceValue(stack);
-        tooltipAdder.accept(Component.literal("Experience Value: " + experienceValue));
-        tooltipAdder.accept(Component.literal("Right-click to use"));
-        tooltipAdder.accept(Component.literal("Shift + Right-click to use all"));
+        tooltipAdder.accept(Component.literal("Experience: " + experienceValue + " points"));
+        tooltipAdder.accept(Component.literal("Right-click to gain experience"));
+        tooltipAdder.accept(Component.literal("Shift + Right-click to use entire stack"));
     }
     
     @Override
